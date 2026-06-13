@@ -34,7 +34,8 @@ import { sampleScenario } from "./sampleScenario";
 
 type DragMode = "move" | "start" | "finish";
 
-interface DragState {
+interface AssignmentDragState {
+  kind: "assignment";
   assignmentId: string;
   mode: DragMode;
   originX: number;
@@ -42,6 +43,16 @@ interface DragState {
   originFinish: TimeKey;
   cellWidth: number;
 }
+
+interface CreateDragState {
+  kind: "create";
+  projectId: string;
+  squadId: string;
+  originKey: TimeKey;
+  currentKey: TimeKey;
+}
+
+type DragState = AssignmentDragState | CreateDragState;
 
 const statusLabel = {
   green: "On track",
@@ -56,6 +67,9 @@ export default function App() {
   );
   const [selectedProjectId, setSelectedProjectId] = useState(
     sampleScenario.projects[0]?.id ?? "",
+  );
+  const [planningSquadId, setPlanningSquadId] = useState(
+    sampleScenario.assignments[0]?.squadId ?? sampleScenario.squads[0]?.id ?? "",
   );
   const [importError, setImportError] = useState("");
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -157,9 +171,12 @@ export default function App() {
     const track = board.querySelector<HTMLElement>(".project-track");
     if (!track) return;
     event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
     setSelectedAssignmentId(assignment.id);
+    setPlanningSquadId(assignment.squadId);
     setDrag({
+      kind: "assignment",
       assignmentId: assignment.id,
       mode,
       originX: event.clientX,
@@ -169,8 +186,35 @@ export default function App() {
     });
   }
 
+  function startCreateDrag(event: PointerEvent<HTMLElement>, projectId: string) {
+    if (!planningSquadId || event.target !== event.currentTarget) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const key = pointerTimeKey(event, event.currentTarget, timeline);
+    setSelectedProjectId(projectId);
+    setDrag({
+      kind: "create",
+      projectId,
+      squadId: planningSquadId,
+      originKey: key,
+      currentKey: key,
+    });
+  }
+
   function continueDrag(event: PointerEvent<HTMLDivElement>) {
     if (!drag) return;
+    if (drag.kind === "create") {
+      const target = document.querySelector<HTMLElement>(
+        `[data-testid="track-${drag.projectId}"]`,
+      );
+      if (!target) return;
+      setDrag({
+        ...drag,
+        currentKey: pointerTimeKey(event, target, timeline),
+      });
+      return;
+    }
+
     const offset = Math.round((event.clientX - drag.originX) / drag.cellWidth);
     const assignment = scenario.assignments.find(
       (candidate) => candidate.id === drag.assignmentId,
@@ -203,9 +247,34 @@ export default function App() {
     }
   }
 
+  function completeDrag() {
+    if (drag?.kind === "create") {
+      const [startKey, finishKey] = sortTimeKeys(drag.originKey, drag.currentKey);
+      const id = `assignment-${Date.now()}`;
+      updateScenario((current) => ({
+        ...current,
+        assignments: [
+          ...current.assignments,
+          {
+            id,
+            projectId: drag.projectId,
+            squadId: drag.squadId,
+            startKey,
+            finishKey,
+          },
+        ],
+      }));
+      setSelectedAssignmentId(id);
+      setSelectedProjectId(drag.projectId);
+    }
+    setDrag(null);
+  }
+
   function addAssignment() {
     const project = scenario.projects[0];
-    const squad = scenario.squads[0];
+    const squad =
+      scenario.squads.find((candidate) => candidate.id === planningSquadId) ??
+      scenario.squads[0];
     if (!project || !squad) return;
     const id = `assignment-${Date.now()}`;
     updateScenario((current) => ({
@@ -305,7 +374,7 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell" onPointerMove={continueDrag} onPointerUp={() => setDrag(null)}>
+    <main className="app-shell" onPointerMove={continueDrag} onPointerUp={completeDrag}>
       <header className="app-topbar">
         <div>
           <p className="eyebrow">Portfolio feasibility</p>
@@ -350,6 +419,8 @@ export default function App() {
                 onSelectAssignment={setSelectedAssignmentId}
                 onAssignmentPointerDown={startDrag}
                 onAssignmentKeyDown={handleAssignmentKeyDown}
+                onTrackPointerDown={startCreateDrag}
+                pendingCreate={drag?.kind === "create" ? drag : null}
               />
             ))}
           </div>
@@ -361,6 +432,7 @@ export default function App() {
             scenario={scenario}
             selectedAssignment={selectedAssignment}
             selectedProject={selectedProject}
+            planningSquadId={planningSquadId}
             timeline={timeline}
             onScenarioNameChange={(name) =>
               updateScenario((current) => ({
@@ -370,6 +442,7 @@ export default function App() {
             }
             onSelectAssignment={setSelectedAssignmentId}
             onSelectProject={setSelectedProjectId}
+            onSelectPlanningSquad={setPlanningSquadId}
             onAssignmentChange={updateAssignment}
             onProjectChange={(projectId, patch) =>
               updateScenario((current) => ({
@@ -450,6 +523,8 @@ function ProjectLane({
   onSelectAssignment,
   onAssignmentPointerDown,
   onAssignmentKeyDown,
+  onTrackPointerDown,
+  pendingCreate,
 }: {
   project: Project;
   scenario: ScenarioFileV1;
@@ -463,6 +538,8 @@ function ProjectLane({
     mode: DragMode,
   ) => void;
   onAssignmentKeyDown: (event: KeyboardEvent<HTMLButtonElement>, assignmentId: string) => void;
+  onTrackPointerDown: (event: PointerEvent<HTMLElement>, projectId: string) => void;
+  pendingCreate: CreateDragState | null;
 }) {
   const projectAssignments = scenario.assignments.filter(
     (assignment) => assignment.projectId === project.id,
@@ -478,7 +555,11 @@ function ProjectLane({
         <span>{project.name}</span>
         <small>{project.effortFteYears} FTE-years</small>
       </button>
-      <div className="project-track">
+      <div
+        className="project-track"
+        data-testid={`track-${project.id}`}
+        onPointerDown={(event) => onTrackPointerDown(event, project.id)}
+      >
         {projectAssignments.map((assignment) => {
           const squad = scenario.squads.find((candidate) => candidate.id === assignment.squadId);
           const start = timeline.indexOf(assignment.startKey);
@@ -527,6 +608,18 @@ function ProjectLane({
             key={milestone.id}
           />
         ))}
+        {pendingCreate?.projectId === project.id ? (
+          <div
+            className="assignment-bar assignment-preview"
+            style={previewBarStyle(pendingCreate, timeline, scenario)}
+          >
+            <span className="bar-handle" />
+            <span className="assignment-name">
+              {scenario.squads.find((squad) => squad.id === pendingCreate.squadId)?.name}
+            </span>
+            <span className="bar-handle" />
+          </div>
+        ) : null}
       </div>
     </>
   );
@@ -585,10 +678,12 @@ function EditorPanel({
   scenario,
   selectedAssignment,
   selectedProject,
+  planningSquadId,
   timeline,
   onScenarioNameChange,
   onSelectAssignment,
   onSelectProject,
+  onSelectPlanningSquad,
   onAssignmentChange,
   onProjectChange,
   onMilestoneChange,
@@ -600,10 +695,12 @@ function EditorPanel({
   scenario: ScenarioFileV1;
   selectedAssignment?: Assignment;
   selectedProject?: Project;
+  planningSquadId: string;
   timeline: TimeKey[];
   onScenarioNameChange: (name: string) => void;
   onSelectAssignment: (id: string) => void;
   onSelectProject: (id: string) => void;
+  onSelectPlanningSquad: (id: string) => void;
   onAssignmentChange: (
     assignmentId: string,
     patch: Partial<Pick<Assignment, "startKey" | "finishKey" | "projectId" | "squadId">>,
@@ -648,6 +745,15 @@ function EditorPanel({
           Assignment
         </button>
       </div>
+
+      <label>
+        Planning squad
+        <select value={planningSquadId} onChange={(event) => onSelectPlanningSquad(event.target.value)}>
+          {scenario.squads.map((squad) => (
+            <option value={squad.id} key={squad.id}>{squad.name}</option>
+          ))}
+        </select>
+      </label>
 
       <label>
         Project
@@ -736,6 +842,37 @@ function EditorPanel({
           <p className="selected-range">
             {assignmentLabel(scenario, selectedAssignment)} {selectedAssignment.startKey} to {selectedAssignment.finishKey}
           </p>
+          <label>
+            Assignment project
+            <select
+              value={selectedAssignment.projectId}
+              onChange={(event) =>
+                onAssignmentChange(selectedAssignment.id, {
+                  projectId: event.target.value,
+                })
+              }
+            >
+              {scenario.projects.map((project) => (
+                <option value={project.id} key={project.id}>{project.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Assignment squad
+            <select
+              value={selectedAssignment.squadId}
+              onChange={(event) => {
+                onAssignmentChange(selectedAssignment.id, {
+                  squadId: event.target.value,
+                });
+                onSelectPlanningSquad(event.target.value);
+              }}
+            >
+              {scenario.squads.map((squad) => (
+                <option value={squad.id} key={squad.id}>{squad.name}</option>
+              ))}
+            </select>
+          </label>
           <label>
             Start
             <select
@@ -841,6 +978,43 @@ function clampToTimeline(key: TimeKey, timeline: TimeKey[]): TimeKey {
   if (compareTimeKeys(key, timeline[0]) < 0) return timeline[0];
   if (compareTimeKeys(key, timeline.at(-1)!) > 0) return timeline.at(-1)!;
   return key;
+}
+
+function pointerTimeKey(
+  event: Pick<PointerEvent<HTMLElement>, "clientX">,
+  target: HTMLElement,
+  timeline: TimeKey[],
+): TimeKey {
+  const rect = target.getBoundingClientRect();
+  const cellWidth = rect.width / timeline.length;
+  const clientX = Number.isFinite(event.clientX) ? event.clientX : rect.left;
+  const rawIndex = cellWidth > 0 ? Math.floor((clientX - rect.left) / cellWidth) : 0;
+  const safeIndex = Number.isFinite(rawIndex) ? rawIndex : 0;
+  const clampedIndex = Math.min(Math.max(safeIndex, 0), timeline.length - 1);
+  return timeline[clampedIndex];
+}
+
+function sortTimeKeys(a: TimeKey, b: TimeKey): [TimeKey, TimeKey] {
+  return compareTimeKeys(a, b) <= 0 ? [a, b] : [b, a];
+}
+
+function previewBarStyle(
+  pendingCreate: CreateDragState,
+  timeline: TimeKey[],
+  scenario: ScenarioFileV1,
+): React.CSSProperties {
+  const [startKey, finishKey] = sortTimeKeys(
+    pendingCreate.originKey,
+    pendingCreate.currentKey,
+  );
+  const start = timeline.indexOf(startKey);
+  const finish = timeline.indexOf(finishKey);
+  const squad = scenario.squads.find((candidate) => candidate.id === pendingCreate.squadId);
+
+  return {
+    gridColumn: `${start + 1} / span ${finish - start + 1}`,
+    backgroundColor: squad?.color,
+  };
 }
 
 function assignmentLabel(scenario: ScenarioFileV1, assignment: Assignment): string {
