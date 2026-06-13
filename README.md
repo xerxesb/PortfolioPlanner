@@ -12,7 +12,16 @@ The approved first concept is a visual portfolio map:
 
 ## Repository Status
 
-This repo currently contains product and agentic workflow documentation only. No app stack has been selected yet.
+The first browser-based MVP is implemented as a Vite + React + TypeScript app. It includes sample portfolio data, sprint-snapped assignment bars, feasibility calculations, a team capacity heatmap, minimal editors, and `.resourceplan.json` scenario import/export.
+
+## Running Locally
+
+```bash
+npm install
+npm run dev
+```
+
+The dev server prints the local URL, usually `http://127.0.0.1:5173`.
 
 ## Key Documents
 
@@ -24,4 +33,10 @@ This repo currently contains product and agentic workflow documentation only. No
 
 ## Current Verification
 
-There are no automated tests yet because no application code exists. Once a stack is selected, update `AGENTS.md` with exact setup, dev, lint, typecheck, and test commands.
+```bash
+npm test
+npm run typecheck
+npm run lint
+npm run build
+npm run test:e2e
+```

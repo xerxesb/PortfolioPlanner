@@ -6,19 +6,22 @@ ResourcePlanner is a portfolio feasibility planning tool for sequencing multi-ye
 
 ## Current State
 
-- This repository is in concept/spec setup mode.
-- There is no application stack yet.
-- Before adding app code, create or update an implementation plan in `docs/superpowers/plans/`.
+- This repository contains the first browser-based MVP implementation.
+- The app stack is Vite, React, TypeScript, Vitest, React Testing Library, Playwright, Zod, and lucide-react.
+- Product implementation plans live in `docs/superpowers/plans/`.
 
 ## Setup Commands
 
 - Inspect repo status: `git status --short`
 - List tracked files: `git ls-files`
 - Find files/text: `rg --files` and `rg "<query>"`
-- No dependency install command exists yet.
-- No test command exists yet.
-
-When a tech stack is introduced, update this file with exact install, dev-server, lint, typecheck, and test commands.
+- Install dependencies: `npm install`
+- Start dev server: `npm run dev`
+- Run unit/component tests: `npm test`
+- Run e2e tests: `npm run test:e2e`
+- Run lint: `npm run lint`
+- Run typecheck: `npm run typecheck`
+- Run production build: `npm run build`
 
 ## Agentic Workflow
 
@@ -52,7 +55,7 @@ When a tech stack is introduced, update this file with exact install, dev-server
 - Add tests for feasibility calculations, scenario import/export, and time-address parsing before or with implementation.
 - Prefer pure functions for planning calculations so they are easy to test.
 - For UI work, verify drag/resize behavior, snap-to-sprint behavior, and non-overlap rendering across desktop widths.
-- Until a test runner exists, document manual verification steps in the PR description.
+- Document manual browser verification steps in the PR description for UI changes.
 
 ## PR Instructions
 
