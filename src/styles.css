@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700;800&family=Newsreader:opsz,wght@6..72,600;6..72,700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700;800&display=swap");
 
 :root {
   color: #162033;
@@ -73,9 +73,10 @@ h2 {
 }
 
 h1 {
-  font-family: "Newsreader", serif;
-  font-size: 40px;
-  line-height: 0.95;
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1;
 }
 
 h2 {
@@ -369,6 +370,15 @@ h2 {
   outline: none;
 }
 
+.assignment-context-menu button.add {
+  color: var(--accent);
+}
+
+.assignment-context-menu button.add:hover,
+.assignment-context-menu button.add:focus-visible {
+  background: #f0fdfa;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -390,8 +400,9 @@ h2 {
 
 .metric strong {
   display: block;
-  font-family: "Newsreader", serif;
-  font-size: 28px;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
 }
 
 .metric span {

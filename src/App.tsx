@@ -832,6 +832,7 @@ function LaneContextMenuView({
         <button
           type="button"
           role="menuitem"
+          className="add"
           onClick={() => onAdd(menu.projectId, menu.dateKey)}
         >
           <Plus size={14} />
