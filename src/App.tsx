@@ -1,4 +1,6 @@
 import {
+  ChevronDown,
+  ChevronRight,
   Database,
   Download,
   FileUp,
@@ -39,7 +41,7 @@ import {
   shiftTimeKey,
   sprintDurationInclusive,
 } from "./domain/time";
-import type { Assignment, Project, ScenarioFileV1, TimeKey } from "./domain/types";
+import type { Assignment, Project, ScenarioFileV1, Squad, TimeKey } from "./domain/types";
 import { sampleScenario } from "./sampleScenario";
 
 const STORAGE_KEY = "resourceplanner-autosave-v1";
@@ -134,6 +136,7 @@ export default function App() {
     () => { const s = loadInitialScenario(); return s.assignments[0]?.squadId ?? s.squads[0]?.id ?? ""; },
   );
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
+  const [squadDeleteError, setSquadDeleteError] = useState<{ squadId: string; message: string } | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [assignmentMenu, setAssignmentMenu] = useState<AssignmentContextMenu | null>(null);
   const [laneMenu, setLaneMenu] = useState<LaneContextMenu | null>(null);
@@ -478,6 +481,7 @@ export default function App() {
   }
 
   function addSquad() {
+    setSquadDeleteError(null);
     const id = `squad-${Date.now()}`;
     updateScenario((current) => ({
       ...current,
@@ -490,6 +494,33 @@ export default function App() {
           color: "#0f766e",
         },
       ],
+    }));
+  }
+
+  function updateSquad(squadId: string, patch: Partial<Pick<Squad, "name" | "capacityFte" | "color">>) {
+    setSquadDeleteError(null);
+    updateScenario((current) => ({
+      ...current,
+      squads: current.squads.map((squad) =>
+        squad.id === squadId ? { ...squad, ...patch } : squad,
+      ),
+    }));
+  }
+
+  function removeSquad(squadId: string) {
+    const assignmentCount = scenario.assignments.filter((a) => a.squadId === squadId).length;
+    if (assignmentCount > 0) {
+      const squadName = scenario.squads.find((s) => s.id === squadId)?.name ?? "this squad";
+      setSquadDeleteError({
+        squadId,
+        message: `Remove all ${assignmentCount} assignment${assignmentCount === 1 ? "" : "s"} for ${squadName} first.`,
+      });
+      return;
+    }
+    setSquadDeleteError(null);
+    updateScenario((current) => ({
+      ...current,
+      squads: current.squads.filter((squad) => squad.id !== squadId),
     }));
   }
 
@@ -618,7 +649,6 @@ export default function App() {
             scenario={scenario}
             selectedAssignment={selectedAssignment}
             selectedProject={selectedProject}
-            planningSquadId={planningSquadId}
             timeline={timeline}
             onScenarioNameChange={(name) =>
               updateScenario((current) => ({
@@ -626,6 +656,7 @@ export default function App() {
                 scenario: { ...current.scenario, name },
               }))
             }
+            planningSquadId={planningSquadId}
             onSelectPlanningSquad={setPlanningSquadId}
             onAssignmentChange={updateAssignment}
             onProjectChange={(projectId, patch) =>
@@ -690,7 +721,10 @@ export default function App() {
             onAddAssignment={addAssignment}
             onRemoveAssignment={removeSelectedAssignment}
             onAddProject={addProject}
-            onAddSquad={addSquad}
+            onSquadAdd={addSquad}
+            onSquadUpdate={updateSquad}
+            onSquadRemove={removeSquad}
+            squadDeleteError={squadDeleteError}
           />
         </aside>
       </section>
@@ -1019,7 +1053,7 @@ function FeasibilitySummaryView({
       <div className="risk-list">
         {milestones.map((milestone) => (
           <div className={`risk-item ${milestone.status}`} key={milestone.milestoneId}>
-            <strong>{milestone.name}</strong>
+            <strong>{milestone.projectName} ({milestone.name})</strong>
             <span>
               {statusLabel[milestone.status]} at {milestone.dateKey}. {Math.round(milestone.actualCapacity)} of {Math.round(milestone.requiredCapacity)} FTE-sprints covered.
             </span>
@@ -1051,9 +1085,9 @@ function EditorPanel({
   scenario,
   selectedAssignment,
   selectedProject,
-  planningSquadId,
   timeline,
   onScenarioNameChange,
+  planningSquadId,
   onSelectPlanningSquad,
   onAssignmentChange,
   onProjectChange,
@@ -1063,14 +1097,17 @@ function EditorPanel({
   onAddAssignment,
   onRemoveAssignment,
   onAddProject,
-  onAddSquad,
+  onSquadAdd,
+  onSquadUpdate,
+  onSquadRemove,
+  squadDeleteError,
 }: {
   scenario: ScenarioFileV1;
   selectedAssignment?: Assignment;
   selectedProject?: Project;
-  planningSquadId: string;
   timeline: TimeKey[];
   onScenarioNameChange: (name: string) => void;
+  planningSquadId: string;
   onSelectPlanningSquad: (id: string) => void;
   onAssignmentChange: (
     assignmentId: string,
@@ -1087,7 +1124,10 @@ function EditorPanel({
   onAddAssignment: () => void;
   onRemoveAssignment: () => void;
   onAddProject: () => void;
-  onAddSquad: () => void;
+  onSquadAdd: () => void;
+  onSquadUpdate: (squadId: string, patch: Partial<Pick<Squad, "name" | "capacityFte" | "color">>) => void;
+  onSquadRemove: (squadId: string) => void;
+  squadDeleteError: { squadId: string; message: string } | null;
 }) {
   const mode = selectedAssignment ? "assignment" : selectedProject ? "project" : "none";
 
@@ -1111,15 +1151,19 @@ function EditorPanel({
           <Plus size={14} />
           Project
         </button>
-        <button type="button" className="small-command" onClick={onAddSquad}>
-          <Plus size={14} />
-          Squad
-        </button>
         <button type="button" className="small-command" onClick={onAddAssignment}>
           <Plus size={14} />
           Assignment
         </button>
       </div>
+
+      <SquadsEditorSection
+        squads={scenario.squads}
+        deleteError={squadDeleteError}
+        onUpdate={onSquadUpdate}
+        onRemove={onSquadRemove}
+        onAdd={onSquadAdd}
+      />
 
       {mode === "none" ? (
         <div className="editor-empty">
@@ -1315,6 +1359,81 @@ function EditorPanel({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function SquadsEditorSection({
+  squads,
+  deleteError,
+  onUpdate,
+  onRemove,
+  onAdd,
+}: {
+  squads: Squad[];
+  deleteError: { squadId: string; message: string } | null;
+  onUpdate: (squadId: string, patch: Partial<Pick<Squad, "name" | "capacityFte" | "color">>) => void;
+  onRemove: (squadId: string) => void;
+  onAdd: () => void;
+}) {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <div className="squads-section">
+      <button
+        type="button"
+        className="squads-section-heading"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        Squads
+      </button>
+      {open ? (
+        <>
+          {squads.map((squad) => (
+            <div key={squad.id} className="squad-row">
+              <input
+                type="color"
+                className="squad-color-swatch"
+                value={squad.color ?? "#0f766e"}
+                aria-label={`Colour for ${squad.name}`}
+                onChange={(event) => onUpdate(squad.id, { color: event.target.value })}
+              />
+              <input
+                className="squad-name-input"
+                value={squad.name}
+                aria-label={`Name for ${squad.name}`}
+                onChange={(event) => onUpdate(squad.id, { name: event.target.value })}
+              />
+              <input
+                type="number"
+                className="squad-fte-input"
+                min="0.5"
+                step="0.5"
+                value={squad.capacityFte}
+                aria-label={`FTE capacity for ${squad.name}`}
+                onChange={(event) => onUpdate(squad.id, { capacityFte: Number(event.target.value) })}
+              />
+              <button
+                type="button"
+                className="squad-delete-btn"
+                aria-label={`Delete squad ${squad.name}`}
+                onClick={() => onRemove(squad.id)}
+              >
+                <Trash2 size={14} />
+              </button>
+              {deleteError?.squadId === squad.id ? (
+                <p className="squad-delete-error">{deleteError.message}</p>
+              ) : null}
+            </div>
+          ))}
+          <button type="button" className="small-command squad-add-btn" onClick={onAdd}>
+            <Plus size={14} />
+            Add squad
+          </button>
+        </>
+      ) : null}
+    </div>
   );
 }
 

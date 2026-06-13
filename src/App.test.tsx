@@ -109,6 +109,39 @@ describe("Portfolio Scenario Planner app", () => {
 
     expect(track.querySelector(".milestone-marker")).toBeNull();
   });
+
+  it("shows all squads with name, FTE, and colour inputs in the editor panel", () => {
+    render(<App />);
+    // sample scenario has squads "Squad A" and "Squad B"
+    expect(screen.getByRole("textbox", { name: /name for squad a/i })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /name for squad b/i })).toBeInTheDocument();
+    // Each squad row has a number input for FTE
+    const fteInputs = screen.getAllByRole("spinbutton");
+    expect(fteInputs.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("updates squad name immediately when edited", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const nameInput = screen.getByRole("textbox", { name: /name for squad a/i });
+    await user.clear(nameInput);
+    await user.type(nameInput, "Alpha Team");
+
+    expect(screen.getByRole("textbox", { name: /name for alpha team/i })).toBeInTheDocument();
+  });
+
+  it("shows an error and does not delete a squad that has assignments", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    // Squad A has assignments in the sample scenario — find its delete button
+    const deleteButtons = screen.getAllByRole("button", { name: /delete squad/i });
+    await user.click(deleteButtons[0]);
+
+    expect(screen.getByText(/Remove all/i)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /name for squad a/i })).toBeInTheDocument();
+  });
 });
 
 function firePointer(target: Element, type: string, clientX: number) {

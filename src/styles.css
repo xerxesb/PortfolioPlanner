@@ -588,6 +588,114 @@ h2 {
   margin: 12px 14px 0;
 }
 
+/* Squad editor section */
+.squads-section {
+  margin: 12px 14px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.squads-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  font-size: 11px;
+  font-weight: 900;
+  color: #46546a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.squads-section-heading:hover {
+  color: #1e293b;
+}
+
+.squad-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 52px 32px;
+  grid-template-rows: auto auto;
+  gap: 4px;
+  align-items: center;
+}
+
+.squad-color-swatch {
+  width: 28px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  cursor: pointer;
+  background: none;
+}
+
+.squad-name-input {
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0 7px;
+  font-size: 13px;
+  color: var(--ink);
+  background: #fff;
+  min-width: 0;
+}
+
+.squad-fte-input {
+  width: 52px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0 5px;
+  font-size: 13px;
+  color: var(--ink);
+  background: #fff;
+  text-align: right;
+}
+
+.squad-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #fed7aa;
+  border-radius: 5px;
+  background: var(--panel-strong);
+  color: #9a3412;
+  cursor: pointer;
+}
+
+.squad-delete-btn:hover {
+  background: #fff7ed;
+}
+
+.squad-delete-error {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: #9a3412;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 5px;
+  padding: 4px 8px;
+  margin: 0;
+}
+
+.squad-add-btn {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
 .capacity-panel {
   overflow-x: auto;
 }
@@ -702,7 +810,7 @@ h2 {
 .info-tooltip {
   display: none;
   position: absolute;
-  bottom: calc(100% + 6px);
+  top: calc(100% + 6px);
   left: 0;
   background: #1e293b;
   color: white;
