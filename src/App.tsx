@@ -28,6 +28,7 @@ import {
 } from "./domain/feasibility";
 import {
   calculateProjectCumulativeHeatmap,
+  calculateProjectMilestoneCoverageHeatmap,
   calculateProjectSprintHeatmap,
   type ProjectCumulativeHeatmap,
   type ProjectSprintHeatmap,
@@ -146,6 +147,7 @@ export default function App() {
   const feasibility = useMemo(() => calculateFeasibility(scenario), [scenario]);
   const heatmap = useMemo(() => calculateCapacityHeatmap(scenario), [scenario]);
   const cumulativeHeatmap = useMemo(() => calculateProjectCumulativeHeatmap(scenario), [scenario]);
+  const milestoneCoverageHeatmap = useMemo(() => calculateProjectMilestoneCoverageHeatmap(scenario), [scenario]);
   const sprintHeatmap = useMemo(() => calculateProjectSprintHeatmap(scenario), [scenario]);
 
   useEffect(() => {
@@ -733,6 +735,7 @@ export default function App() {
         scenario={scenario}
         heatmap={heatmap}
         cumulativeHeatmap={cumulativeHeatmap}
+        milestoneCoverageHeatmap={milestoneCoverageHeatmap}
         sprintHeatmap={sprintHeatmap}
         timeline={timeline}
       />
@@ -1574,16 +1577,18 @@ function ProjectResourcingPanel({
   scenario,
   heatmap,
   cumulativeHeatmap,
+  milestoneCoverageHeatmap,
   sprintHeatmap,
   timeline,
 }: {
   scenario: ScenarioFileV1;
   heatmap: ReturnType<typeof calculateCapacityHeatmap>;
   cumulativeHeatmap: ProjectCumulativeHeatmap;
+  milestoneCoverageHeatmap: ProjectCumulativeHeatmap;
   sprintHeatmap: ProjectSprintHeatmap;
   timeline: TimeKey[];
 }) {
-  const [activeTab, setActiveTab] = useState<"cumulative" | "sprint" | "team">("cumulative");
+  const [activeTab, setActiveTab] = useState<"cumulative" | "milestone" | "sprint" | "team">("cumulative");
 
   return (
     <section className="capacity-panel">
@@ -1604,6 +1609,14 @@ function ProjectResourcingPanel({
         </button>
         <button
           type="button"
+          className={`resourcing-tab${activeTab === "milestone" ? " active" : ""}`}
+          onClick={() => setActiveTab("milestone")}
+        >
+          Milestone coverage
+          <InfoIcon tooltip="Shows cumulative resourcing as a % of the next upcoming milestone's required effort. Once a milestone is covered (≥100%), the denominator switches to the next milestone. Falls back to total project effort when no future milestones remain." />
+        </button>
+        <button
+          type="button"
           className={`resourcing-tab${activeTab === "sprint" ? " active" : ""}`}
           onClick={() => setActiveTab("sprint")}
         >
@@ -1621,6 +1634,9 @@ function ProjectResourcingPanel({
       </div>
       {activeTab === "cumulative" && (
         <ProjectCumulativeView scenario={scenario} heatmap={cumulativeHeatmap} timeline={timeline} />
+      )}
+      {activeTab === "milestone" && (
+        <ProjectCumulativeView scenario={scenario} heatmap={milestoneCoverageHeatmap} timeline={timeline} />
       )}
       {activeTab === "sprint" && (
         <ProjectSprintView scenario={scenario} heatmap={sprintHeatmap} timeline={timeline} />
