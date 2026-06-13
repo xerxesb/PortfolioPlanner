@@ -1,10 +1,12 @@
 import {
+  Database,
   Download,
   FileUp,
   Plus,
   RotateCcw,
   Save,
   Trash2,
+  X,
 } from "lucide-react";
 import {
   Fragment,
@@ -12,6 +14,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type PointerEvent,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -21,6 +24,12 @@ import {
   calculateFeasibility,
   scenarioTimeline,
 } from "./domain/feasibility";
+import {
+  calculateProjectCumulativeHeatmap,
+  calculateProjectSprintHeatmap,
+  type ProjectCumulativeHeatmap,
+  type ProjectSprintHeatmap,
+} from "./domain/projectResourcing";
 import { exportScenario, importScenario } from "./domain/scenario";
 import {
   compareTimeKeys,
@@ -32,6 +41,39 @@ import {
 } from "./domain/time";
 import type { Assignment, Project, ScenarioFileV1, TimeKey } from "./domain/types";
 import { sampleScenario } from "./sampleScenario";
+
+const STORAGE_KEY = "resourceplanner-autosave-v1";
+
+function loadInitialScenario(): ScenarioFileV1 {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) return importScenario(saved);
+  } catch {
+    // corrupt or unavailable, fall through
+  }
+  return sampleScenario;
+}
+
+function makeEmptyScenario(): ScenarioFileV1 {
+  const now = new Date().toISOString();
+  return {
+    schemaVersion: 1,
+    scenario: {
+      id: `scenario-${Date.now()}`,
+      name: "New scenario",
+      createdAt: now,
+      updatedAt: now,
+    },
+    calendar: {
+      financialYearStartMonth: 7,
+      piCountPerCalendarYear: 4,
+      sprintsPerPi: 4,
+    },
+    squads: [],
+    projects: [],
+    assignments: [],
+  };
+}
 
 const VIEW_YEAR_OPTIONS = Array.from({ length: 10 }, (_, i) => {
   const yy = String(24 + i).padStart(2, "0");
@@ -81,17 +123,17 @@ const statusLabel = {
 };
 
 export default function App() {
-  const [scenario, setScenario] = useState<ScenarioFileV1>(sampleScenario);
+  const [scenario, setScenario] = useState<ScenarioFileV1>(loadInitialScenario);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState(
-    sampleScenario.assignments[0]?.id ?? "",
+    () => loadInitialScenario().assignments[0]?.id ?? "",
   );
   const [selectedProjectId, setSelectedProjectId] = useState(
-    sampleScenario.projects[0]?.id ?? "",
+    () => loadInitialScenario().projects[0]?.id ?? "",
   );
   const [planningSquadId, setPlanningSquadId] = useState(
-    sampleScenario.assignments[0]?.squadId ?? sampleScenario.squads[0]?.id ?? "",
+    () => { const s = loadInitialScenario(); return s.assignments[0]?.squadId ?? s.squads[0]?.id ?? ""; },
   );
-  const [importError, setImportError] = useState("");
+  const [isDataModalOpen, setIsDataModalOpen] = useState(false);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [assignmentMenu, setAssignmentMenu] = useState<AssignmentContextMenu | null>(null);
   const [laneMenu, setLaneMenu] = useState<LaneContextMenu | null>(null);
@@ -100,6 +142,17 @@ export default function App() {
   const timeline = useMemo(() => scenarioTimeline(scenario), [scenario]);
   const feasibility = useMemo(() => calculateFeasibility(scenario), [scenario]);
   const heatmap = useMemo(() => calculateCapacityHeatmap(scenario), [scenario]);
+  const cumulativeHeatmap = useMemo(() => calculateProjectCumulativeHeatmap(scenario), [scenario]);
+  const sprintHeatmap = useMemo(() => calculateProjectSprintHeatmap(scenario), [scenario]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, exportScenario(scenario));
+    } catch {
+      // storage full or unavailable
+    }
+  }, [scenario]);
+
   const selectedAssignment = scenario.assignments.find(
     (assignment) => assignment.id === selectedAssignmentId,
   );
@@ -365,10 +418,8 @@ export default function App() {
         (assignment) => assignment.id !== assignmentId,
       ),
     }));
-    const nextAssignment = scenario.assignments.find(
-      (assignment) => assignment.id !== assignmentId,
-    );
-    setSelectedAssignmentId(nextAssignment?.id ?? "");
+    setSelectedAssignmentId("");
+    setSelectedProjectId("");
     setAssignmentMenu(null);
   }
 
@@ -442,32 +493,9 @@ export default function App() {
     }));
   }
 
-  function exportFile() {
-    const blob = new Blob([exportScenario(scenario)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${scenario.scenario.id}.resourceplan.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function importFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const nextScenario = importScenario(await file.text());
-      setScenario(nextScenario);
-      setSelectedAssignmentId(nextScenario.assignments[0]?.id ?? "");
-      setSelectedProjectId(nextScenario.projects[0]?.id ?? "");
-      setPlanningSquadId(nextScenario.assignments[0]?.squadId ?? nextScenario.squads[0]?.id ?? "");
-      setImportError("");
-    } catch (error) {
-      setImportError(error instanceof Error ? error.message : "Import failed");
-    } finally {
-      event.target.value = "";
-    }
+  function selectProject(id: string) {
+    setSelectedProjectId(id);
+    setSelectedAssignmentId("");
   }
 
   function setViewStart(yy: string) {
@@ -505,21 +533,12 @@ export default function App() {
           <h1>Portfolio Scenario Planner</h1>
         </div>
         <div className="topbar-actions">
-          <button type="button" className="icon-button" onClick={() => { setScenario(sampleScenario); setSelectedAssignmentId(sampleScenario.assignments[0]?.id ?? ""); setSelectedProjectId(sampleScenario.projects[0]?.id ?? ""); setPlanningSquadId(sampleScenario.assignments[0]?.squadId ?? sampleScenario.squads[0]?.id ?? ""); }} aria-label="Reset sample scenario">
-            <RotateCcw size={18} />
-          </button>
-          <label className="icon-button file-button" aria-label="Import scenario">
-            <FileUp size={18} />
-            <input type="file" accept=".json,.resourceplan.json,application/json" onChange={importFile} />
-          </label>
-          <button type="button" className="command-button" onClick={exportFile}>
-            <Download size={17} />
-            Export scenario
+          <button type="button" className="command-button" onClick={() => setIsDataModalOpen(true)}>
+            <Database size={17} />
+            Scenario data
           </button>
         </div>
       </header>
-
-      {importError ? <div className="import-error">{importError}</div> : null}
 
       <section className="workspace-grid">
         <section className="board-panel" aria-label="Project sequencing board">
@@ -563,7 +582,8 @@ export default function App() {
                 scenario={scenario}
                 timeline={timeline}
                 selectedAssignmentId={selectedAssignmentId}
-                onSelectProject={setSelectedProjectId}
+                selectedProjectId={selectedAssignmentId ? "" : selectedProjectId}
+                onSelectProject={selectProject}
                 onSelectAssignment={setSelectedAssignmentId}
                 onAssignmentPointerDown={startDrag}
                 onAssignmentKeyDown={handleAssignmentKeyDown}
@@ -606,8 +626,6 @@ export default function App() {
                 scenario: { ...current.scenario, name },
               }))
             }
-            onSelectAssignment={setSelectedAssignmentId}
-            onSelectProject={setSelectedProjectId}
             onSelectPlanningSquad={setPlanningSquadId}
             onAssignmentChange={updateAssignment}
             onProjectChange={(projectId, patch) =>
@@ -635,6 +653,40 @@ export default function App() {
                 ),
               }))
             }
+            onAddMilestone={(projectId) => {
+              const project = scenario.projects.find((p) => p.id === projectId);
+              if (!project) return;
+              const dateKey = project.targetFinishKey ?? timeline.at(-4) ?? timeline[0];
+              updateScenario((current) => ({
+                ...current,
+                projects: current.projects.map((p) =>
+                  p.id === projectId
+                    ? {
+                        ...p,
+                        milestones: [
+                          ...p.milestones,
+                          {
+                            id: crypto.randomUUID(),
+                            name: "New milestone",
+                            dateKey,
+                            requiredPercent: 70,
+                          },
+                        ],
+                      }
+                    : p,
+                ),
+              }));
+            }}
+            onRemoveMilestone={(projectId, milestoneId) =>
+              updateScenario((current) => ({
+                ...current,
+                projects: current.projects.map((p) =>
+                  p.id === projectId
+                    ? { ...p, milestones: p.milestones.filter((m) => m.id !== milestoneId) }
+                    : p,
+                ),
+              }))
+            }
             onAddAssignment={addAssignment}
             onRemoveAssignment={removeSelectedAssignment}
             onAddProject={addProject}
@@ -643,10 +695,28 @@ export default function App() {
         </aside>
       </section>
 
-      <CapacityHeatmapView scenario={scenario} heatmap={heatmap} timeline={timeline} />
+      <ProjectResourcingPanel
+        scenario={scenario}
+        heatmap={heatmap}
+        cumulativeHeatmap={cumulativeHeatmap}
+        sprintHeatmap={sprintHeatmap}
+        timeline={timeline}
+      />
       <footer className="app-footer">
         <span>© 2026 Xerxes Battiwalla</span>
       </footer>
+      {isDataModalOpen ? (
+        <ScenarioDataModal
+          scenario={scenario}
+          onApply={(next) => {
+            setScenario(next);
+            setSelectedAssignmentId(next.assignments[0]?.id ?? "");
+            setSelectedProjectId(next.projects[0]?.id ?? "");
+            setPlanningSquadId(next.assignments[0]?.squadId ?? next.squads[0]?.id ?? "");
+          }}
+          onClose={() => setIsDataModalOpen(false)}
+        />
+      ) : null}
     </main>
   );
 }
@@ -688,6 +758,7 @@ function ProjectLane({
   scenario,
   timeline,
   selectedAssignmentId,
+  selectedProjectId,
   onSelectProject,
   onSelectAssignment,
   onAssignmentPointerDown,
@@ -702,6 +773,7 @@ function ProjectLane({
   scenario: ScenarioFileV1;
   timeline: TimeKey[];
   selectedAssignmentId: string;
+  selectedProjectId: string;
   onSelectProject: (id: string) => void;
   onSelectAssignment: (id: string) => void;
   onAssignmentPointerDown: (
@@ -730,7 +802,7 @@ function ProjectLane({
     <>
       <button
         type="button"
-        className="project-label"
+        className={`project-label${selectedProjectId === project.id ? " selected" : ""}`}
         onClick={() => onSelectProject(project.id)}
       >
         <span>{project.name}</span>
@@ -824,7 +896,9 @@ function ProjectLane({
                 event.clientY,
               );
             }}
-          />
+          >
+            <span className="milestone-label">{milestone.name}</span>
+          </span>
         ))}
         {pendingCreate?.projectId === project.id ? (
           <div
@@ -980,12 +1054,12 @@ function EditorPanel({
   planningSquadId,
   timeline,
   onScenarioNameChange,
-  onSelectAssignment,
-  onSelectProject,
   onSelectPlanningSquad,
   onAssignmentChange,
   onProjectChange,
   onMilestoneChange,
+  onAddMilestone,
+  onRemoveMilestone,
   onAddAssignment,
   onRemoveAssignment,
   onAddProject,
@@ -997,8 +1071,6 @@ function EditorPanel({
   planningSquadId: string;
   timeline: TimeKey[];
   onScenarioNameChange: (name: string) => void;
-  onSelectAssignment: (id: string) => void;
-  onSelectProject: (id: string) => void;
   onSelectPlanningSquad: (id: string) => void;
   onAssignmentChange: (
     assignmentId: string,
@@ -1010,11 +1082,15 @@ function EditorPanel({
     milestoneId: string,
     patch: Partial<Project["milestones"][number]>,
   ) => void;
+  onAddMilestone: (projectId: string) => void;
+  onRemoveMilestone: (projectId: string, milestoneId: string) => void;
   onAddAssignment: () => void;
   onRemoveAssignment: () => void;
   onAddProject: () => void;
   onAddSquad: () => void;
 }) {
+  const mode = selectedAssignment ? "assignment" : selectedProject ? "project" : "none";
+
   return (
     <section className="panel-card editor-card">
       <div className="panel-heading compact">
@@ -1045,205 +1121,213 @@ function EditorPanel({
         </button>
       </div>
 
-      <label>
-        Planning squad
-        <select value={planningSquadId} onChange={(event) => onSelectPlanningSquad(event.target.value)}>
-          {scenario.squads.map((squad) => (
-            <option value={squad.id} key={squad.id}>{squad.name}</option>
-          ))}
-        </select>
-      </label>
-
-      <label>
-        Project
-        <select value={selectedProject?.id ?? ""} onChange={(event) => onSelectProject(event.target.value)}>
-          {scenario.projects.map((project) => (
-            <option value={project.id} key={project.id}>{project.name}</option>
-          ))}
-        </select>
-      </label>
-
-      {selectedProject ? (
-        <div className="editor-stack">
+      {mode === "none" ? (
+        <div className="editor-empty">
           <label>
-            Project name
-            <input
-              value={selectedProject.name}
-              onChange={(event) => onProjectChange(selectedProject.id, { name: event.target.value })}
-            />
-          </label>
-          <label>
-            Effort FTE-years
-            <input
-              type="number"
-              min="0.25"
-              step="0.25"
-              value={selectedProject.effortFteYears}
-              onChange={(event) =>
-                onProjectChange(selectedProject.id, {
-                  effortFteYears: Number(event.target.value),
-                })
-              }
-            />
-          </label>
-          <label>
-            Target start
-            <select
-              value={selectedProject.targetStartKey ?? ""}
-              onChange={(event) =>
-                onProjectChange(selectedProject.id, {
-                  targetStartKey: event.target.value ? event.target.value as TimeKey : undefined,
-                })
-              }
-            >
-              <option value="">(none)</option>
-              {timeline.map((key) => (
-                <option value={key} key={key}>{key}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Target finish
-            <select
-              value={selectedProject.targetFinishKey}
-              onChange={(event) =>
-                onProjectChange(selectedProject.id, {
-                  targetFinishKey: event.target.value as TimeKey,
-                })
-              }
-            >
-              {timeline.map((key) => (
-                <option value={key} key={key}>{key}</option>
-              ))}
-            </select>
-          </label>
-          {selectedProject.milestones.map((milestone) => (
-            <div className="milestone-editor" key={milestone.id}>
-              <strong>{milestone.name}</strong>
-              <label>
-                Gate sprint
-                <select
-                  value={milestone.dateKey}
-                  onChange={(event) =>
-                    onMilestoneChange(selectedProject.id, milestone.id, {
-                      dateKey: event.target.value as TimeKey,
-                    })
-                  }
-                >
-                  {timeline.map((key) => (
-                    <option value={key} key={key}>{key}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Required %
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  value={milestone.requiredPercent}
-                  onChange={(event) =>
-                    onMilestoneChange(selectedProject.id, milestone.id, {
-                      requiredPercent: Number(event.target.value),
-                    })
-                  }
-                />
-              </label>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      <label>
-        Assignment
-        <select value={selectedAssignment?.id ?? ""} onChange={(event) => onSelectAssignment(event.target.value)}>
-          {scenario.assignments.map((assignment) => {
-            const project = scenario.projects.find((candidate) => candidate.id === assignment.projectId);
-            const squad = scenario.squads.find((candidate) => candidate.id === assignment.squadId);
-            return (
-              <option value={assignment.id} key={assignment.id}>{squad?.name} on {project?.name}</option>
-            );
-          })}
-        </select>
-      </label>
-
-      {selectedAssignment ? (
-        <div className="editor-stack">
-          <p className="selected-range">
-            {assignmentLabel(scenario, selectedAssignment)} {selectedAssignment.startKey} to {selectedAssignment.finishKey}
-          </p>
-          <label>
-            Assignment project
-            <select
-              value={selectedAssignment.projectId}
-              onChange={(event) =>
-                onAssignmentChange(selectedAssignment.id, {
-                  projectId: event.target.value,
-                })
-              }
-            >
-              {scenario.projects.map((project) => (
-                <option value={project.id} key={project.id}>{project.name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Assignment squad
-            <select
-              value={selectedAssignment.squadId}
-              onChange={(event) => {
-                onAssignmentChange(selectedAssignment.id, {
-                  squadId: event.target.value,
-                });
-                onSelectPlanningSquad(event.target.value);
-              }}
-            >
+            Planning squad
+            <select value={planningSquadId} onChange={(event) => onSelectPlanningSquad(event.target.value)}>
               {scenario.squads.map((squad) => (
                 <option value={squad.id} key={squad.id}>{squad.name}</option>
               ))}
             </select>
           </label>
-          <label>
-            Start
-            <select
-              value={selectedAssignment.startKey}
-              onChange={(event) =>
-                onAssignmentChange(selectedAssignment.id, {
-                  startKey: event.target.value as TimeKey,
-                })
-              }
+          <p className="editor-hint">Select a project or assignment on the board to edit.</p>
+        </div>
+      ) : null}
+
+      {mode === "project" && selectedProject ? (
+        <div className="context-card">
+          <div className="context-card-heading">Project</div>
+          <div className="editor-stack">
+            <label>
+              Project name
+              <input
+                value={selectedProject.name}
+                onChange={(event) => onProjectChange(selectedProject.id, { name: event.target.value })}
+              />
+            </label>
+            <label>
+              Effort FTE-years
+              <input
+                type="number"
+                min="0.25"
+                step="0.25"
+                value={selectedProject.effortFteYears}
+                onChange={(event) =>
+                  onProjectChange(selectedProject.id, { effortFteYears: Number(event.target.value) })
+                }
+              />
+            </label>
+            <label>
+              Target start
+              <select
+                value={selectedProject.targetStartKey ?? ""}
+                onChange={(event) =>
+                  onProjectChange(selectedProject.id, {
+                    targetStartKey: event.target.value ? event.target.value as TimeKey : undefined,
+                  })
+                }
+              >
+                <option value="">(none)</option>
+                {timeline.map((key) => (
+                  <option value={key} key={key}>{key}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Target finish
+              <select
+                value={selectedProject.targetFinishKey}
+                onChange={(event) =>
+                  onProjectChange(selectedProject.id, { targetFinishKey: event.target.value as TimeKey })
+                }
+              >
+                {timeline.map((key) => (
+                  <option value={key} key={key}>{key}</option>
+                ))}
+              </select>
+            </label>
+            {selectedProject.milestones.map((milestone) => (
+              <div className="milestone-editor" key={milestone.id}>
+                <div className="milestone-editor-header">
+                  <label>
+                    Name
+                    <input
+                      value={milestone.name}
+                      onChange={(event) =>
+                        onMilestoneChange(selectedProject.id, milestone.id, { name: event.target.value })
+                      }
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="milestone-delete"
+                    aria-label={`Delete milestone ${milestone.name}`}
+                    onClick={() => onRemoveMilestone(selectedProject.id, milestone.id)}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+                <label>
+                  Gate sprint
+                  <select
+                    value={milestone.dateKey}
+                    onChange={(event) =>
+                      onMilestoneChange(selectedProject.id, milestone.id, { dateKey: event.target.value as TimeKey })
+                    }
+                  >
+                    {timeline.map((key) => (
+                      <option value={key} key={key}>{key}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Required %
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={milestone.requiredPercent}
+                    onChange={(event) =>
+                      onMilestoneChange(selectedProject.id, milestone.id, { requiredPercent: Number(event.target.value) })
+                    }
+                  />
+                </label>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="small-command milestone-add"
+              onClick={() => onAddMilestone(selectedProject.id)}
             >
-              {timeline.map((key) => (
-                <option value={key} key={key}>{key}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Finish
-            <select
-              value={selectedAssignment.finishKey}
-              onChange={(event) =>
-                onAssignmentChange(selectedAssignment.id, {
-                  finishKey: event.target.value as TimeKey,
-                })
-              }
-            >
-              {timeline.map((key) => (
-                <option value={key} key={key}>{key}</option>
-              ))}
-            </select>
-          </label>
-          <button type="button" className="danger-command" onClick={onRemoveAssignment}>
-            <Trash2 size={14} />
-            Remove assignment
-          </button>
+              <Plus size={14} />
+              Add milestone
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {mode === "assignment" && selectedAssignment ? (
+        <div className="context-card">
+          <div className="context-card-heading">Assignment</div>
+          <div className="editor-stack">
+            <p className="selected-range">
+              {assignmentLabel(scenario, selectedAssignment)} {selectedAssignment.startKey} to {selectedAssignment.finishKey}
+            </p>
+            <label>
+              Project
+              <select
+                value={selectedAssignment.projectId}
+                onChange={(event) =>
+                  onAssignmentChange(selectedAssignment.id, { projectId: event.target.value })
+                }
+              >
+                {scenario.projects.map((project) => (
+                  <option value={project.id} key={project.id}>{project.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Squad
+              <select
+                value={selectedAssignment.squadId}
+                onChange={(event) => {
+                  onAssignmentChange(selectedAssignment.id, { squadId: event.target.value });
+                  onSelectPlanningSquad(event.target.value);
+                }}
+              >
+                {scenario.squads.map((squad) => (
+                  <option value={squad.id} key={squad.id}>{squad.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Start
+              <select
+                value={selectedAssignment.startKey}
+                onChange={(event) =>
+                  onAssignmentChange(selectedAssignment.id, { startKey: event.target.value as TimeKey })
+                }
+              >
+                {timeline.map((key) => (
+                  <option value={key} key={key}>{key}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Finish
+              <select
+                value={selectedAssignment.finishKey}
+                onChange={(event) =>
+                  onAssignmentChange(selectedAssignment.id, { finishKey: event.target.value as TimeKey })
+                }
+              >
+                {timeline.map((key) => (
+                  <option value={key} key={key}>{key}</option>
+                ))}
+              </select>
+            </label>
+            <button type="button" className="danger-command" onClick={onRemoveAssignment}>
+              <Trash2 size={14} />
+              Remove assignment
+            </button>
+          </div>
         </div>
       ) : null}
     </section>
   );
 }
 
-function CapacityHeatmapView({
+function InfoIcon({ tooltip }: { tooltip: string }) {
+  return (
+    <span className="info-icon" aria-label={tooltip}>
+      i
+      <span className="info-tooltip" role="tooltip">{tooltip}</span>
+    </span>
+  );
+}
+
+function TeamCapacityGrid({
   scenario,
   heatmap,
   timeline,
@@ -1253,36 +1337,178 @@ function CapacityHeatmapView({
   timeline: TimeKey[];
 }) {
   return (
-    <section className="capacity-panel">
-      <div className="panel-heading">
-        <div>
-          <h2>Team capacity</h2>
-          <p>Secondary sprint-grid diagnostic view</p>
-        </div>
-      </div>
+    <div className="capacity-grid" style={{ "--sprint-count": timeline.length } as React.CSSProperties}>
+      <div className="capacity-label">Squad</div>
+      {timeline.map((key) => (
+        <div className="capacity-head" key={key}>{key}</div>
+      ))}
+      {scenario.squads.map((squad) => (
+        <Fragment key={squad.id}>
+          <div className="capacity-label" key={`${squad.id}-label`}>{squad.name}</div>
+          {timeline.map((key) => {
+            const cell = heatmap.bySquad[squad.id][key];
+            const shortNames = cell.projectIds
+              .map((projectId) => scenario.projects.find((project) => project.id === projectId)?.name.split(" ")[0])
+              .filter(Boolean)
+              .join(" + ");
+            return (
+              <div className={`capacity-cell ${cell.status}`} key={`${squad.id}-${key}`}>
+                {cell.status === "idle" ? "-" : shortNames}
+              </div>
+            );
+          })}
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+function ProjectCumulativeView({
+  scenario,
+  heatmap,
+  timeline,
+}: {
+  scenario: ScenarioFileV1;
+  heatmap: ProjectCumulativeHeatmap;
+  timeline: TimeKey[];
+}) {
+  return (
+    <>
       <div className="capacity-grid" style={{ "--sprint-count": timeline.length } as React.CSSProperties}>
-        <div className="capacity-label">Squad</div>
+        <div className="capacity-label">Project</div>
         {timeline.map((key) => (
           <div className="capacity-head" key={key}>{key}</div>
         ))}
-        {scenario.squads.map((squad) => (
-          <Fragment key={squad.id}>
-            <div className="capacity-label" key={`${squad.id}-label`}>{squad.name}</div>
+        {scenario.projects.map((project) => (
+          <Fragment key={project.id}>
+            <div className="capacity-label capacity-label--project">
+              <span>{project.name}</span>
+              <small>{project.effortFteYears} FTE-yrs · {project.targetFinishKey}</small>
+            </div>
             {timeline.map((key) => {
-              const cell = heatmap.bySquad[squad.id][key];
-              const shortNames = cell.projectIds
-                .map((projectId) => scenario.projects.find((project) => project.id === projectId)?.name.split(" ")[0])
-                .filter(Boolean)
-                .join(" + ");
+              const cell = heatmap.byProject[project.id]?.[key];
+              if (!cell) return <div className="capacity-cell resourcing-unresourced" key={key} />;
               return (
-                <div className={`capacity-cell ${cell.status}`} key={`${squad.id}-${key}`}>
-                  {cell.status === "idle" ? "-" : shortNames}
+                <div className={`capacity-cell resourcing-${cell.status}`} key={key}>
+                  {cell.percent > 0 ? `${Math.round(cell.percent)}%` : ""}
                 </div>
               );
             })}
           </Fragment>
         ))}
       </div>
+      <div className="resourcing-legend">
+        <span className="resourcing-legend-item"><span className="resourcing-swatch resourcing-unresourced" />No coverage</span>
+        <span className="resourcing-legend-item"><span className="resourcing-swatch resourcing-in-progress" />In progress</span>
+        <span className="resourcing-legend-item"><span className="resourcing-swatch resourcing-complete" />Fully resourced</span>
+        <span className="resourcing-legend-item"><span className="resourcing-swatch resourcing-over" />Over-resourced</span>
+        <span className="resourcing-legend-item"><span className="resourcing-swatch resourcing-at-risk" />At risk (past target)</span>
+      </div>
+    </>
+  );
+}
+
+function ProjectSprintView({
+  scenario,
+  heatmap,
+  timeline,
+}: {
+  scenario: ScenarioFileV1;
+  heatmap: ProjectSprintHeatmap;
+  timeline: TimeKey[];
+}) {
+  return (
+    <>
+      <div className="capacity-grid" style={{ "--sprint-count": timeline.length } as React.CSSProperties}>
+        <div className="capacity-label">Project</div>
+        {timeline.map((key) => (
+          <div className="capacity-head" key={key}>{key}</div>
+        ))}
+        {scenario.projects.map((project) => (
+          <Fragment key={project.id}>
+            <div className="capacity-label capacity-label--project">
+              <span>{project.name}</span>
+              <small>{project.effortFteYears} FTE-yrs</small>
+            </div>
+            {timeline.map((key) => {
+              const cell = heatmap.byProject[project.id]?.[key];
+              if (!cell) return <div className="capacity-cell resourcing-unresourced" key={key} />;
+              return (
+                <div className={`capacity-cell resourcing-${cell.status}`} key={key}>
+                  {cell.fteSprints > 0 ? cell.fteSprints : "–"}
+                </div>
+              );
+            })}
+          </Fragment>
+        ))}
+      </div>
+      <div className="resourcing-legend">
+        <span className="resourcing-legend-item"><span className="resourcing-swatch resourcing-unresourced" />No assignment</span>
+        <span className="resourcing-legend-item"><span className="resourcing-swatch resourcing-resourced" />Assigned FTE</span>
+        <span className="resourcing-legend-item"><span className="resourcing-swatch resourcing-over" />Over-resourced</span>
+      </div>
+    </>
+  );
+}
+
+function ProjectResourcingPanel({
+  scenario,
+  heatmap,
+  cumulativeHeatmap,
+  sprintHeatmap,
+  timeline,
+}: {
+  scenario: ScenarioFileV1;
+  heatmap: ReturnType<typeof calculateCapacityHeatmap>;
+  cumulativeHeatmap: ProjectCumulativeHeatmap;
+  sprintHeatmap: ProjectSprintHeatmap;
+  timeline: TimeKey[];
+}) {
+  const [activeTab, setActiveTab] = useState<"cumulative" | "sprint" | "team">("cumulative");
+
+  return (
+    <section className="capacity-panel">
+      <div className="panel-heading">
+        <div>
+          <h2>Project resourcing</h2>
+          <p>Sprint-level diagnostic view</p>
+        </div>
+      </div>
+      <div className="resourcing-tabs">
+        <button
+          type="button"
+          className={`resourcing-tab${activeTab === "cumulative" ? " active" : ""}`}
+          onClick={() => setActiveTab("cumulative")}
+        >
+          Cumulative coverage
+          <InfoIcon tooltip="Shows the running % of each project's total FTE-year demand covered as assignments accumulate left to right. Red cells appear when the target finish date passes with less than 100% coverage. Orange cells mean the project is over-resourced." />
+        </button>
+        <button
+          type="button"
+          className={`resourcing-tab${activeTab === "sprint" ? " active" : ""}`}
+          onClick={() => setActiveTab("sprint")}
+        >
+          Per-sprint allocation
+          <InfoIcon tooltip="Shows the raw FTE assigned to each project per sprint. Orange cells appear once the project's cumulative FTE-sprints exceed its total demand — useful for Planisware export validation." />
+        </button>
+        <button
+          type="button"
+          className={`resourcing-tab${activeTab === "team" ? " active" : ""}`}
+          onClick={() => setActiveTab("team")}
+        >
+          Team capacity
+          <InfoIcon tooltip="Shows each squad's per-sprint status: idle (no work assigned), committed (assigned to a project), or overbooked (assigned to multiple projects in the same sprint)." />
+        </button>
+      </div>
+      {activeTab === "cumulative" && (
+        <ProjectCumulativeView scenario={scenario} heatmap={cumulativeHeatmap} timeline={timeline} />
+      )}
+      {activeTab === "sprint" && (
+        <ProjectSprintView scenario={scenario} heatmap={sprintHeatmap} timeline={timeline} />
+      )}
+      {activeTab === "team" && (
+        <TeamCapacityGrid scenario={scenario} heatmap={heatmap} timeline={timeline} />
+      )}
     </section>
   );
 }
@@ -1351,4 +1577,119 @@ function assignmentLabel(scenario: ScenarioFileV1, assignment: Assignment): stri
   const project = scenario.projects.find((candidate) => candidate.id === assignment.projectId);
   const squad = scenario.squads.find((candidate) => candidate.id === assignment.squadId);
   return `${squad?.name ?? "Squad"} on ${project?.name ?? "Project"}`;
+}
+
+function ScenarioDataModal({
+  scenario,
+  onApply,
+  onClose,
+}: {
+  scenario: ScenarioFileV1;
+  onApply: (next: ScenarioFileV1) => void;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState(() => exportScenario(scenario));
+  const [error, setError] = useState("");
+
+  function handleApply() {
+    try {
+      const next = importScenario(text);
+      onApply(next);
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Invalid scenario JSON");
+    }
+  }
+
+  function handleExport() {
+    try {
+      const parsed = importScenario(text);
+      const blob = new Blob([exportScenario(parsed)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${parsed.scenario.id}.resourceplan.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Fix JSON errors before exporting");
+    }
+  }
+
+  async function handleImport(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const json = await file.text();
+      const next = importScenario(json);
+      setText(exportScenario(next));
+      setError("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Import failed");
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  function handleReset() {
+    setText(exportScenario(sampleScenario));
+    setError("");
+  }
+
+  function handleClear() {
+    setText(exportScenario(makeEmptyScenario()));
+    setError("");
+  }
+
+  return (
+    <div
+      className="modal-backdrop"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Scenario data editor"
+    >
+      <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Scenario data</h2>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+        <textarea
+          className="scenario-textarea"
+          value={text}
+          onChange={(e) => { setText(e.target.value); setError(""); }}
+          spellCheck={false}
+          aria-label="Scenario JSON"
+        />
+        {error ? <p className="modal-error">{error}</p> : null}
+        <div className="modal-footer">
+          <div className="modal-footer-left">
+            <button type="button" className="danger-command" onClick={handleReset}>
+              <RotateCcw size={14} /> Reset to sample
+            </button>
+            <button type="button" className="danger-command" onClick={handleClear}>
+              <Trash2 size={14} /> Clear
+            </button>
+          </div>
+          <div className="modal-footer-right">
+            <label className="icon-button file-button" aria-label="Import from file">
+              <FileUp size={18} />
+              <input type="file" accept=".json,.resourceplan.json,application/json" onChange={handleImport} />
+            </label>
+            <button type="button" className="command-button" onClick={handleExport}>
+              <Download size={17} /> Export
+            </button>
+            <button type="button" className="command-button" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="button" className="command-button" onClick={handleApply}>
+              Apply
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
