@@ -51,6 +51,22 @@ describe("ResourcePlanner app", () => {
       }),
     ).toBeInTheDocument();
   });
+
+  it("deletes an assignment from the chart context menu", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const assignment = screen.getByRole("button", {
+      name: /Squad A on Program Orion/i,
+    });
+    fireEvent.contextMenu(assignment);
+
+    await user.click(screen.getByRole("menuitem", { name: /delete allocation/i }));
+
+    expect(
+      screen.queryByRole("button", { name: /Squad A on Program Orion/i }),
+    ).not.toBeInTheDocument();
+  });
 });
 
 function firePointer(target: Element, type: string, clientX: number) {

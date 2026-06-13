@@ -10,6 +10,7 @@ import {
   Fragment,
   type ChangeEvent,
   type KeyboardEvent,
+  type MouseEvent,
   type PointerEvent,
   useMemo,
   useRef,
@@ -54,6 +55,12 @@ interface CreateDragState {
 
 type DragState = AssignmentDragState | CreateDragState;
 
+interface AssignmentContextMenu {
+  assignmentId: string;
+  x: number;
+  y: number;
+}
+
 const statusLabel = {
   green: "On track",
   amber: "Tight",
@@ -73,6 +80,7 @@ export default function App() {
   );
   const [importError, setImportError] = useState("");
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [assignmentMenu, setAssignmentMenu] = useState<AssignmentContextMenu | null>(null);
   const boardRef = useRef<HTMLDivElement | null>(null);
 
   const timeline = useMemo(() => scenarioTimeline(scenario), [scenario]);
@@ -166,6 +174,7 @@ export default function App() {
     assignment: Assignment,
     mode: DragMode,
   ) {
+    if (event.button > 0) return;
     const board = boardRef.current;
     if (!board) return;
     const track = board.querySelector<HTMLElement>(".project-track");
@@ -187,6 +196,7 @@ export default function App() {
   }
 
   function startCreateDrag(event: PointerEvent<HTMLElement>, projectId: string) {
+    if (event.button > 0) return;
     if (!planningSquadId || event.target !== event.currentTarget) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -270,6 +280,32 @@ export default function App() {
     setDrag(null);
   }
 
+  function openAssignmentMenu(event: MouseEvent<HTMLElement>, assignmentId: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    setDrag(null);
+    setSelectedAssignmentId(assignmentId);
+    setAssignmentMenu({
+      assignmentId,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  }
+
+  function removeAssignment(assignmentId: string) {
+    updateScenario((current) => ({
+      ...current,
+      assignments: current.assignments.filter(
+        (assignment) => assignment.id !== assignmentId,
+      ),
+    }));
+    const nextAssignment = scenario.assignments.find(
+      (assignment) => assignment.id !== assignmentId,
+    );
+    setSelectedAssignmentId(nextAssignment?.id ?? "");
+    setAssignmentMenu(null);
+  }
+
   function addAssignment() {
     const project = scenario.projects[0];
     const squad =
@@ -295,13 +331,7 @@ export default function App() {
 
   function removeSelectedAssignment() {
     if (!selectedAssignment) return;
-    updateScenario((current) => ({
-      ...current,
-      assignments: current.assignments.filter(
-        (assignment) => assignment.id !== selectedAssignment.id,
-      ),
-    }));
-    setSelectedAssignmentId(scenario.assignments[0]?.id ?? "");
+    removeAssignment(selectedAssignment.id);
   }
 
   function addProject() {
@@ -374,7 +404,12 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell" onPointerMove={continueDrag} onPointerUp={completeDrag}>
+    <main
+      className="app-shell"
+      onClick={() => setAssignmentMenu(null)}
+      onPointerMove={continueDrag}
+      onPointerUp={completeDrag}
+    >
       <header className="app-topbar">
         <div>
           <p className="eyebrow">Portfolio feasibility</p>
@@ -419,11 +454,19 @@ export default function App() {
                 onSelectAssignment={setSelectedAssignmentId}
                 onAssignmentPointerDown={startDrag}
                 onAssignmentKeyDown={handleAssignmentKeyDown}
+                onAssignmentContextMenu={openAssignmentMenu}
                 onTrackPointerDown={startCreateDrag}
                 pendingCreate={drag?.kind === "create" ? drag : null}
               />
             ))}
           </div>
+          {assignmentMenu ? (
+            <AssignmentContextMenuView
+              menu={assignmentMenu}
+              scenario={scenario}
+              onDelete={removeAssignment}
+            />
+          ) : null}
         </section>
 
         <aside className="side-panel">
@@ -523,6 +566,7 @@ function ProjectLane({
   onSelectAssignment,
   onAssignmentPointerDown,
   onAssignmentKeyDown,
+  onAssignmentContextMenu,
   onTrackPointerDown,
   pendingCreate,
 }: {
@@ -538,6 +582,7 @@ function ProjectLane({
     mode: DragMode,
   ) => void;
   onAssignmentKeyDown: (event: KeyboardEvent<HTMLButtonElement>, assignmentId: string) => void;
+  onAssignmentContextMenu: (event: MouseEvent<HTMLElement>, assignmentId: string) => void;
   onTrackPointerDown: (event: PointerEvent<HTMLElement>, projectId: string) => void;
   pendingCreate: CreateDragState | null;
 }) {
@@ -579,6 +624,7 @@ function ProjectLane({
               aria-label={`${squad.name} on ${project.name}, ${assignment.startKey} to ${assignment.finishKey}`}
               onFocus={() => onSelectAssignment(assignment.id)}
               onClick={() => onSelectAssignment(assignment.id)}
+              onContextMenu={(event) => onAssignmentContextMenu(event, assignment.id)}
               onKeyDown={(event) => onAssignmentKeyDown(event, assignment.id)}
               onPointerDown={(event) => onAssignmentPointerDown(event, assignment, "move")}
             >
@@ -622,6 +668,41 @@ function ProjectLane({
         ) : null}
       </div>
     </>
+  );
+}
+
+function AssignmentContextMenuView({
+  menu,
+  scenario,
+  onDelete,
+}: {
+  menu: AssignmentContextMenu;
+  scenario: ScenarioFileV1;
+  onDelete: (assignmentId: string) => void;
+}) {
+  const assignment = scenario.assignments.find(
+    (candidate) => candidate.id === menu.assignmentId,
+  );
+
+  if (!assignment) return null;
+
+  return (
+    <div
+      className="assignment-context-menu"
+      role="menu"
+      style={{ left: menu.x, top: menu.y }}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <p>{assignmentLabel(scenario, assignment)}</p>
+      <button
+        type="button"
+        role="menuitem"
+        onClick={() => onDelete(menu.assignmentId)}
+      >
+        <Trash2 size={14} />
+        Delete allocation
+      </button>
+    </div>
   );
 }
 

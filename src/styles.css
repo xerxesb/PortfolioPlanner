@@ -328,6 +328,47 @@ h2 {
   box-shadow: 0 0 0 1px rgba(24, 35, 56, 0.24);
 }
 
+.assignment-context-menu {
+  position: fixed;
+  z-index: 20;
+  display: grid;
+  gap: 4px;
+  min-width: 190px;
+  border: 1px solid rgba(112, 127, 151, 0.3);
+  border-radius: 8px;
+  padding: 6px;
+  background: #fff;
+  box-shadow: 0 18px 40px rgba(24, 35, 56, 0.22);
+}
+
+.assignment-context-menu p {
+  margin: 0;
+  padding: 6px 8px 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.assignment-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 8px;
+  background: transparent;
+  color: #9a3412;
+  font-weight: 900;
+  text-align: left;
+}
+
+.assignment-context-menu button:hover,
+.assignment-context-menu button:focus-visible {
+  background: #fff7ed;
+  outline: none;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
