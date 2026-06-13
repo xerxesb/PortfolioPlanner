@@ -17,6 +17,7 @@ const projectSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   effortFteYears: z.number().positive(),
+  targetStartKey: timeKeySchema.optional(),
   targetFinishKey: timeKeySchema,
   eligibleSquadIds: z.array(z.string().min(1)),
   milestones: z.array(milestoneSchema),

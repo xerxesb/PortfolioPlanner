@@ -33,6 +33,7 @@ export interface Project {
   id: string;
   name: string;
   effortFteYears: number;
+  targetStartKey?: TimeKey;
   targetFinishKey: TimeKey;
   eligibleSquadIds: string[];
   milestones: Milestone[];

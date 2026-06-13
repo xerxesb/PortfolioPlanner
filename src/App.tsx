@@ -790,6 +790,23 @@ function ProjectLane({
             </button>
           );
         })}
+        {(() => {
+          if (!project.targetStartKey) return null;
+          if (compareTimeKeys(project.targetStartKey, timeline.at(-1)!) > 0) return null;
+          if (compareTimeKeys(project.targetFinishKey, timeline[0]) < 0) return null;
+          const startIdx = timeline.indexOf(clampToTimeline(project.targetStartKey, timeline));
+          const finishIdx = timeline.indexOf(clampToTimeline(project.targetFinishKey, timeline));
+          if (startIdx < 0 || finishIdx < 0 || finishIdx < startIdx) return null;
+          const left = (startIdx / timeline.length) * 100;
+          const width = ((finishIdx - startIdx + 1) / timeline.length) * 100;
+          return (
+            <div
+              className="target-window"
+              style={{ left: `${left}%`, width: `${width}%` }}
+              title={`Target: ${project.targetStartKey} → ${project.targetFinishKey}`}
+            />
+          );
+        })()}
         {project.milestones.map((milestone) => (
           <span
             className="milestone-marker"
@@ -1068,6 +1085,37 @@ function EditorPanel({
                 })
               }
             />
+          </label>
+          <label>
+            Target start
+            <select
+              value={selectedProject.targetStartKey ?? ""}
+              onChange={(event) =>
+                onProjectChange(selectedProject.id, {
+                  targetStartKey: event.target.value ? event.target.value as TimeKey : undefined,
+                })
+              }
+            >
+              <option value="">(none)</option>
+              {timeline.map((key) => (
+                <option value={key} key={key}>{key}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Target finish
+            <select
+              value={selectedProject.targetFinishKey}
+              onChange={(event) =>
+                onProjectChange(selectedProject.id, {
+                  targetFinishKey: event.target.value as TimeKey,
+                })
+              }
+            >
+              {timeline.map((key) => (
+                <option value={key} key={key}>{key}</option>
+              ))}
+            </select>
           </label>
           {selectedProject.milestones.map((milestone) => (
             <div className="milestone-editor" key={milestone.id}>
