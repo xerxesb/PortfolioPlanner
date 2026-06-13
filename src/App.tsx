@@ -61,6 +61,14 @@ interface AssignmentContextMenu {
   y: number;
 }
 
+interface LaneContextMenu {
+  projectId: string;
+  dateKey: TimeKey;
+  milestoneId: string | null;
+  x: number;
+  y: number;
+}
+
 const statusLabel = {
   green: "On track",
   amber: "Tight",
@@ -81,6 +89,7 @@ export default function App() {
   const [importError, setImportError] = useState("");
   const [drag, setDrag] = useState<DragState | null>(null);
   const [assignmentMenu, setAssignmentMenu] = useState<AssignmentContextMenu | null>(null);
+  const [laneMenu, setLaneMenu] = useState<LaneContextMenu | null>(null);
   const boardRef = useRef<HTMLDivElement | null>(null);
 
   const timeline = useMemo(() => scenarioTimeline(scenario), [scenario]);
@@ -292,6 +301,58 @@ export default function App() {
     });
   }
 
+  function openLaneMenu(projectId: string, dateKey: TimeKey, x: number, y: number) {
+    setLaneMenu({ projectId, dateKey, milestoneId: null, x, y });
+  }
+
+  function openMilestoneMenu(
+    projectId: string,
+    milestoneId: string,
+    dateKey: TimeKey,
+    x: number,
+    y: number,
+  ) {
+    setLaneMenu({ projectId, dateKey, milestoneId, x, y });
+  }
+
+  function addMilestone(projectId: string, dateKey: TimeKey) {
+    updateScenario((current) => ({
+      ...current,
+      projects: current.projects.map((project) =>
+        project.id === projectId
+          ? {
+              ...project,
+              milestones: [
+                ...project.milestones,
+                {
+                  id: crypto.randomUUID(),
+                  name: "Milestone",
+                  dateKey,
+                  requiredPercent: 70,
+                },
+              ],
+            }
+          : project,
+      ),
+    }));
+    setLaneMenu(null);
+  }
+
+  function removeMilestone(projectId: string, milestoneId: string) {
+    updateScenario((current) => ({
+      ...current,
+      projects: current.projects.map((project) =>
+        project.id === projectId
+          ? {
+              ...project,
+              milestones: project.milestones.filter((m) => m.id !== milestoneId),
+            }
+          : project,
+      ),
+    }));
+    setLaneMenu(null);
+  }
+
   function removeAssignment(assignmentId: string) {
     updateScenario((current) => ({
       ...current,
@@ -406,7 +467,7 @@ export default function App() {
   return (
     <main
       className="app-shell"
-      onClick={() => setAssignmentMenu(null)}
+      onClick={() => { setAssignmentMenu(null); setLaneMenu(null); }}
       onPointerMove={continueDrag}
       onPointerUp={completeDrag}
     >
@@ -456,6 +517,8 @@ export default function App() {
                 onAssignmentKeyDown={handleAssignmentKeyDown}
                 onAssignmentContextMenu={openAssignmentMenu}
                 onTrackPointerDown={startCreateDrag}
+                onLaneContextMenu={openLaneMenu}
+                onMilestoneContextMenu={openMilestoneMenu}
                 pendingCreate={drag?.kind === "create" ? drag : null}
               />
             ))}
@@ -465,6 +528,14 @@ export default function App() {
               menu={assignmentMenu}
               scenario={scenario}
               onDelete={removeAssignment}
+            />
+          ) : null}
+          {laneMenu ? (
+            <LaneContextMenuView
+              menu={laneMenu}
+              scenario={scenario}
+              onAdd={addMilestone}
+              onDelete={removeMilestone}
             />
           ) : null}
         </section>
@@ -568,6 +639,8 @@ function ProjectLane({
   onAssignmentKeyDown,
   onAssignmentContextMenu,
   onTrackPointerDown,
+  onLaneContextMenu,
+  onMilestoneContextMenu,
   pendingCreate,
 }: {
   project: Project;
@@ -584,6 +657,14 @@ function ProjectLane({
   onAssignmentKeyDown: (event: KeyboardEvent<HTMLButtonElement>, assignmentId: string) => void;
   onAssignmentContextMenu: (event: MouseEvent<HTMLElement>, assignmentId: string) => void;
   onTrackPointerDown: (event: PointerEvent<HTMLElement>, projectId: string) => void;
+  onLaneContextMenu: (projectId: string, dateKey: TimeKey, x: number, y: number) => void;
+  onMilestoneContextMenu: (
+    projectId: string,
+    milestoneId: string,
+    dateKey: TimeKey,
+    x: number,
+    y: number,
+  ) => void;
   pendingCreate: CreateDragState | null;
 }) {
   const projectAssignments = scenario.assignments.filter(
@@ -604,6 +685,14 @@ function ProjectLane({
         className="project-track"
         data-testid={`track-${project.id}`}
         onPointerDown={(event) => onTrackPointerDown(event, project.id)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          const rect = event.currentTarget.getBoundingClientRect();
+          const cellWidth = rect.width / timeline.length;
+          const rawIndex = Math.floor((event.clientX - rect.left) / cellWidth);
+          const clampedIndex = Math.min(Math.max(rawIndex, 0), timeline.length - 1);
+          onLaneContextMenu(project.id, timeline[clampedIndex], event.clientX, event.clientY);
+        }}
       >
         {projectAssignments.map((assignment) => {
           const squad = scenario.squads.find((candidate) => candidate.id === assignment.squadId);
@@ -652,6 +741,17 @@ function ProjectLane({
             style={{ left: `${((timeline.indexOf(milestone.dateKey) + 0.5) / timeline.length) * 100}%` }}
             title={`${milestone.name}: ${milestone.dateKey}`}
             key={milestone.id}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onMilestoneContextMenu(
+                project.id,
+                milestone.id,
+                milestone.dateKey,
+                event.clientX,
+                event.clientY,
+              );
+            }}
           />
         ))}
         {pendingCreate?.projectId === project.id ? (
@@ -702,6 +802,51 @@ function AssignmentContextMenuView({
         <Trash2 size={14} />
         Delete allocation
       </button>
+    </div>
+  );
+}
+
+function LaneContextMenuView({
+  menu,
+  scenario,
+  onAdd,
+  onDelete,
+}: {
+  menu: LaneContextMenu;
+  scenario: ScenarioFileV1;
+  onAdd: (projectId: string, dateKey: TimeKey) => void;
+  onDelete: (projectId: string, milestoneId: string) => void;
+}) {
+  const project = scenario.projects.find((p) => p.id === menu.projectId);
+  if (!project) return null;
+
+  return (
+    <div
+      className="assignment-context-menu"
+      role="menu"
+      style={{ left: menu.x, top: menu.y }}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <p>{project.name}</p>
+      {menu.milestoneId === null ? (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => onAdd(menu.projectId, menu.dateKey)}
+        >
+          <Plus size={14} />
+          Add milestone at {menu.dateKey}
+        </button>
+      ) : (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => onDelete(menu.projectId, menu.milestoneId!)}
+        >
+          <Trash2 size={14} />
+          Delete milestone
+        </button>
+      )}
     </div>
   );
 }

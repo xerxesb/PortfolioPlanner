@@ -67,6 +67,48 @@ describe("ResourcePlanner app", () => {
       screen.queryByRole("button", { name: /Squad A on Program Orion/i }),
     ).not.toBeInTheDocument();
   });
+
+  it("adds a milestone via right-click context menu on a project lane", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const track = screen.getByTestId("track-clinical-atlas");
+    track.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        width: 320,
+        height: 70,
+        right: 320,
+        bottom: 70,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    const beforeCount = track.querySelectorAll(".milestone-marker").length;
+    fireEvent.contextMenu(track, { clientX: 40, clientY: 10 });
+
+    const addButton = await screen.findByRole("menuitem", { name: /add milestone/i });
+    await user.click(addButton);
+
+    expect(track.querySelectorAll(".milestone-marker").length).toBe(beforeCount + 1);
+  });
+
+  it("deletes a milestone via right-click context menu on a milestone marker", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const track = screen.getByTestId("track-program-orion");
+    const marker = track.querySelector(".milestone-marker") as HTMLElement;
+    expect(marker).not.toBeNull();
+
+    fireEvent.contextMenu(marker);
+
+    await user.click(screen.getByRole("menuitem", { name: /delete milestone/i }));
+
+    expect(track.querySelector(".milestone-marker")).toBeNull();
+  });
 });
 
 function firePointer(target: Element, type: string, clientX: number) {
