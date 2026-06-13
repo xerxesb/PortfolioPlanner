@@ -3,11 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import App from "./App";
 
-describe("ResourcePlanner app", () => {
+describe("Portfolio Scenario Planner app", () => {
   it("renders the portfolio board, feasibility summary, and capacity heatmap", () => {
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: /ResourcePlanner/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Portfolio Scenario Planner/i })).toBeInTheDocument();
     expect(screen.getAllByText("Program Orion").length).toBeGreaterThan(0);
     expect(screen.getByText("Team capacity")).toBeInTheDocument();
     expect(screen.getByText(/red gates/i)).toBeInTheDocument();

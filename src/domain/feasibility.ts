@@ -133,6 +133,10 @@ export function calculateCapacityHeatmap(scenario: ScenarioFileV1): CapacityHeat
 }
 
 export function scenarioTimeline(scenario: ScenarioFileV1): TimeKey[] {
+  if (scenario.calendar.viewStart && scenario.calendar.viewFinish) {
+    return timelineBetween(scenario.calendar.viewStart, scenario.calendar.viewFinish);
+  }
+
   const keys = [
     ...scenario.projects.map((project) => project.targetFinishKey),
     ...scenario.projects.flatMap((project) =>

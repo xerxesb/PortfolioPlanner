@@ -5,7 +5,7 @@ test("loads sample scenario and exports a native scenario file", async ({
 }) => {
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "ResourcePlanner" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Portfolio Scenario Planner" })).toBeVisible();
   await expect(
     page.getByRole("button", { name: /Program Orion 5 FTE-years/i }),
   ).toBeVisible();

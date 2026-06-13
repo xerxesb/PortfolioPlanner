@@ -1,6 +1,6 @@
-# ResourcePlanner
+# Portfolio Scenario Planner
 
-ResourcePlanner is an early-stage portfolio feasibility planning tool for resource managers sequencing multi-year programs against a finite engineering delivery pool.
+Portfolio Scenario Planner is an early-stage portfolio feasibility planning tool for resource managers sequencing multi-year programs against a finite engineering delivery pool.
 
 The approved first concept is a visual portfolio map:
 

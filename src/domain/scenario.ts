@@ -42,6 +42,8 @@ const scenarioSchema = z.object({
     financialYearStartMonth: z.literal(7),
     piCountPerCalendarYear: z.literal(4),
     sprintsPerPi: z.literal(4),
+    viewStart: timeKeySchema.optional(),
+    viewFinish: timeKeySchema.optional(),
   }),
   squads: z.array(
     z.object({

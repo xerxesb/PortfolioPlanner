@@ -33,6 +33,11 @@ import {
 import type { Assignment, Project, ScenarioFileV1, TimeKey } from "./domain/types";
 import { sampleScenario } from "./sampleScenario";
 
+const VIEW_YEAR_OPTIONS = Array.from({ length: 10 }, (_, i) => {
+  const yy = String(24 + i).padStart(2, "0");
+  return { yy, label: `CY20${yy}` };
+});
+
 type DragMode = "move" | "start" | "finish";
 
 interface AssignmentDragState {
@@ -464,6 +469,28 @@ export default function App() {
     }
   }
 
+  function setViewStart(yy: string) {
+    updateScenario((current) => ({
+      ...current,
+      calendar: {
+        ...current.calendar,
+        viewStart: `${yy}-1-1` as TimeKey,
+        viewFinish: current.calendar.viewFinish ?? timeline.at(-1)!,
+      },
+    }));
+  }
+
+  function setViewFinish(yy: string) {
+    updateScenario((current) => ({
+      ...current,
+      calendar: {
+        ...current.calendar,
+        viewStart: current.calendar.viewStart ?? timeline[0],
+        viewFinish: `${yy}-4-4` as TimeKey,
+      },
+    }));
+  }
+
   return (
     <main
       className="app-shell"
@@ -474,7 +501,7 @@ export default function App() {
       <header className="app-topbar">
         <div>
           <p className="eyebrow">Portfolio feasibility</p>
-          <h1>ResourcePlanner</h1>
+          <h1>Portfolio Scenario Planner</h1>
         </div>
         <div className="topbar-actions">
           <button type="button" className="icon-button" onClick={() => setScenario(sampleScenario)} aria-label="Reset sample scenario">
@@ -501,6 +528,30 @@ export default function App() {
               <p>{scenario.scenario.name}</p>
             </div>
             <span>{timeline[0]} to {timeline.at(-1)}</span>
+          </div>
+          <div className="range-selectors">
+            <label>
+              From
+              <select
+                value={(scenario.calendar.viewStart ?? timeline[0]).slice(0, 2)}
+                onChange={(event) => setViewStart(event.target.value)}
+              >
+                {VIEW_YEAR_OPTIONS.map(({ yy, label }) => (
+                  <option key={yy} value={yy}>{label}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              To
+              <select
+                value={(scenario.calendar.viewFinish ?? timeline.at(-1)!).slice(0, 2)}
+                onChange={(event) => setViewFinish(event.target.value)}
+              >
+                {VIEW_YEAR_OPTIONS.map(({ yy, label }) => (
+                  <option key={yy} value={yy}>{label}</option>
+                ))}
+              </select>
+            </label>
           </div>
           <div className="planner-grid" style={timelineStyle} ref={boardRef}>
             <TimelineHeaders timeline={timeline} fiscalYearStartMonth={scenario.calendar.financialYearStartMonth} />
@@ -592,6 +643,9 @@ export default function App() {
       </section>
 
       <CapacityHeatmapView scenario={scenario} heatmap={heatmap} timeline={timeline} />
+      <footer className="app-footer">
+        <span>© 2026 Xerxes Battiwalla</span>
+      </footer>
     </main>
   );
 }

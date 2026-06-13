@@ -581,3 +581,40 @@ h2 {
     flex-wrap: wrap;
   }
 }
+
+.range-selectors {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  background: #f6f8fb;
+}
+
+.range-selectors label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.range-selectors select {
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 7px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.app-footer {
+  padding: 14px 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}

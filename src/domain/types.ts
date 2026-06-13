@@ -14,6 +14,8 @@ export interface ScenarioFileV1 {
     financialYearStartMonth: 7;
     piCountPerCalendarYear: 4;
     sprintsPerPi: 4;
+    viewStart?: TimeKey;
+    viewFinish?: TimeKey;
   };
   squads: Squad[];
   projects: Project[];
