@@ -703,8 +703,7 @@ export default function App() {
         timeline={timeline}
       />
       <footer className="app-footer">
-        <span>© 2026 Xerxes Battiwalla</span>
-        <span className="app-version">{__GIT_SHA__}</span>
+        <span>© 2026 Xerxes Battiwalla &nbsp;(v {__GIT_SHA__})</span>
       </footer>
       {isDataModalOpen ? (
         <ScenarioDataModal
