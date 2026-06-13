@@ -461,6 +461,7 @@ export default function App() {
       setScenario(nextScenario);
       setSelectedAssignmentId(nextScenario.assignments[0]?.id ?? "");
       setSelectedProjectId(nextScenario.projects[0]?.id ?? "");
+      setPlanningSquadId(nextScenario.assignments[0]?.squadId ?? nextScenario.squads[0]?.id ?? "");
       setImportError("");
     } catch (error) {
       setImportError(error instanceof Error ? error.message : "Import failed");
@@ -504,7 +505,7 @@ export default function App() {
           <h1>Portfolio Scenario Planner</h1>
         </div>
         <div className="topbar-actions">
-          <button type="button" className="icon-button" onClick={() => setScenario(sampleScenario)} aria-label="Reset sample scenario">
+          <button type="button" className="icon-button" onClick={() => { setScenario(sampleScenario); setSelectedAssignmentId(sampleScenario.assignments[0]?.id ?? ""); setSelectedProjectId(sampleScenario.projects[0]?.id ?? ""); setPlanningSquadId(sampleScenario.assignments[0]?.squadId ?? sampleScenario.squads[0]?.id ?? ""); }} aria-label="Reset sample scenario">
             <RotateCcw size={18} />
           </button>
           <label className="icon-button file-button" aria-label="Import scenario">
