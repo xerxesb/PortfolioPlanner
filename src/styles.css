@@ -48,6 +48,7 @@ button {
   gap: 18px;
   min-height: 100vh;
   padding: 22px;
+  align-content: start;
 }
 
 .app-topbar {
@@ -93,6 +94,11 @@ h1 {
   font-weight: 800;
   letter-spacing: -0.5px;
   line-height: 1;
+}
+
+.app-topbar h1 {
+  font-size: 22px;
+  letter-spacing: -0.3px;
 }
 
 h2 {
