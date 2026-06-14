@@ -936,13 +936,13 @@ function ResourceMapModal({
   function copyAsTsv() {
     const fixedHeaders = [
       "ID", "Name", "Role / Title", "FTE Equivalent",
-      "Location", "Team / Squad", "Project", "Manager",
+      "Location", "Manager", "Team / Squad", "Project",
     ];
     const header = [...fixedHeaders, ...months.map((m) => m.label)].join("\t");
     const dataRows = rows.map((row) => {
       const fixed = [
         row.engineerId, row.engineerName, "", "", "",
-        row.squadName, projectLabel(row), "",
+        "", row.squadName, projectLabel(row),
       ];
       const cells = row.monthCells.map((v) => (v > 0 ? String(v) : ""));
       return [...fixed, ...cells].join("\t");
@@ -990,9 +990,9 @@ function ResourceMapModal({
                 <th>Role / Title</th>
                 <th>FTE Equivalent</th>
                 <th>Location</th>
+                <th>Manager</th>
                 <th>Team / Squad</th>
                 <th>Project</th>
-                <th>Manager</th>
                 {months.map((m) => (
                   <th key={m.label} className="rm-month-head">{m.label}</th>
                 ))}
@@ -1006,9 +1006,9 @@ function ResourceMapModal({
                   <td />
                   <td />
                   <td />
+                  <td />
                   <td>{row.squadName}</td>
                   <td>{projectLabel(row)}</td>
-                  <td />
                   {row.monthCells.map((v, j) => (
                     <td key={j} className="rm-cell">{v > 0 ? String(v) : ""}</td>
                   ))}
