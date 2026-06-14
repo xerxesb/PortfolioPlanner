@@ -102,3 +102,15 @@ export function getPiLabel(key: TimeKey): string {
   const { year, pi } = parseTimeKey(key);
   return `${String(year).padStart(2, "0")}-${pi}`;
 }
+
+/**
+ * Returns a monotonically increasing integer representing the calendar month
+ * containing the given sprint. Formula: year * 12 + (pi - 1) * 3 + monthWithinPi.
+ * Sprint mapping within PI: sprints 1–2 → month 0, sprint 3 → month 1, sprint 4 → month 2.
+ * Example: "26-3-1" → 318 (July 2026: 318 % 12 = 6, month = 7).
+ */
+export function sprintToCalendarMonthIndex(key: TimeKey): number {
+  const { year, pi, sprint } = parseTimeKey(key);
+  const monthWithinPi = Math.floor(((sprint - 1) * 3) / 4);
+  return year * 12 + (pi - 1) * 3 + monthWithinPi;
+}

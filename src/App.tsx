@@ -53,7 +53,8 @@ import {
   shiftTimeKey,
   sprintDurationInclusive,
 } from "./domain/time";
-import type { Assignment, Project, ScenarioFileV1, Squad, TimeKey } from "./domain/types";
+import { buildResourceMapRows } from "./domain/resourceMap";
+import type { Assignment, Engineer, Project, ScenarioFileV1, Squad, TimeKey } from "./domain/types";
 import { sampleScenario } from "./sampleScenario";
 
 const STORAGE_KEY = "resourceplanner-autosave-v1";
@@ -149,6 +150,8 @@ export default function App() {
   );
   const [isDataModalOpen, setIsDataModalOpen] = useState(false);
   const [squadDeleteError, setSquadDeleteError] = useState<{ squadId: string; message: string } | null>(null);
+  const [expandedSquadId, setExpandedSquadId] = useState<string | null>(null);
+  const [isResourceMapOpen, setIsResourceMapOpen] = useState(false);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [assignmentMenu, setAssignmentMenu] = useState<AssignmentContextMenu | null>(null);
   const [laneMenu, setLaneMenu] = useState<LaneContextMenu | null>(null);
@@ -565,6 +568,41 @@ export default function App() {
     }));
   }
 
+  function addMember(squadId: string): void {
+    updateScenario((current) => ({
+      ...current,
+      squads: current.squads.map((squad) => {
+        if (squad.id !== squadId) return squad;
+        const members = [...(squad.members ?? []), { id: 0, name: "" }];
+        return { ...squad, members, capacityFte: members.length };
+      }),
+    }));
+  }
+
+  function updateMember(squadId: string, memberIndex: number, patch: Partial<Engineer>): void {
+    updateScenario((current) => ({
+      ...current,
+      squads: current.squads.map((squad) => {
+        if (squad.id !== squadId) return squad;
+        const members = (squad.members ?? []).map((m, i) =>
+          i === memberIndex ? { ...m, ...patch } : m,
+        );
+        return { ...squad, members };
+      }),
+    }));
+  }
+
+  function removeMember(squadId: string, memberIndex: number): void {
+    updateScenario((current) => ({
+      ...current,
+      squads: current.squads.map((squad) => {
+        if (squad.id !== squadId) return squad;
+        const members = (squad.members ?? []).filter((_, i) => i !== memberIndex);
+        return { ...squad, members, capacityFte: members.length };
+      }),
+    }));
+  }
+
   function selectProject(id: string) {
     setSelectedProjectId(id);
     setSelectedAssignmentId("");
@@ -625,6 +663,9 @@ export default function App() {
           <span className="topbar-scenario-name">{scenario.scenario.name}</span>
         </div>
         <div className="topbar-actions">
+          <button type="button" className="command-button" onClick={() => setIsResourceMapOpen(true)}>
+            Resource map
+          </button>
           <button type="button" className="command-button" onClick={() => setIsDataModalOpen(true)}>
             <Database size={17} />
             Scenario data
@@ -830,11 +871,16 @@ export default function App() {
             onSquadUpdate={updateSquad}
             onSquadRemove={removeSquad}
             squadDeleteError={squadDeleteError}
+            expandedSquadId={expandedSquadId}
+            onToggleSquadExpand={(id) => setExpandedSquadId((prev) => (prev === id ? null : id))}
+            onSquadAddMember={addMember}
+            onSquadUpdateMember={updateMember}
+            onSquadRemoveMember={removeMember}
           />
         </aside>
       </section>
       <footer className="app-footer">
-        <span>© 2026 Xerxes Battiwalla &nbsp;(v {__GIT_SHA__})</span>
+        <span>© 2026 Xerxes Battiwalla &nbsp;({__GIT_SHA__})</span>
       </footer>
       {isDataModalOpen ? (
         <ScenarioDataModal
@@ -848,7 +894,120 @@ export default function App() {
           onClose={() => setIsDataModalOpen(false)}
         />
       ) : null}
+      {isResourceMapOpen ? (
+        <ResourceMapModal
+          squads={scenario.squads}
+          assignments={scenario.assignments}
+          projects={scenario.projects}
+          onClose={() => setIsResourceMapOpen(false)}
+        />
+      ) : null}
     </main>
+  );
+}
+
+function ResourceMapModal({
+  squads,
+  assignments,
+  projects,
+  onClose,
+}: {
+  squads: Squad[];
+  assignments: Assignment[];
+  projects: Project[];
+  onClose: () => void;
+}) {
+  const { months, rows } = useMemo(
+    () => buildResourceMapRows(squads, assignments, projects),
+    [squads, assignments, projects],
+  );
+  const [copied, setCopied] = useState(false);
+
+  function copyAsTsv() {
+    const fixedHeaders = [
+      "ID", "Name", "Role / Title", "FTE Equivalent",
+      "Location", "Team / Squad", "Project", "Manager",
+    ];
+    const header = [...fixedHeaders, ...months.map((m) => m.label)].join("\t");
+    const dataRows = rows.map((row) => {
+      const fixed = [
+        row.engineerId, row.engineerName, "", "", "",
+        row.squadName, row.projectName, "",
+      ];
+      const cells = row.monthCells.map((v) => (v ? "1" : ""));
+      return [...fixed, ...cells].join("\t");
+    });
+    const tsv = [header, ...dataRows].join("\n");
+    navigator.clipboard.writeText(tsv).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Resource map">
+      <div className="modal-panel resource-map-modal">
+        <div className="modal-header">
+          <h2>Resource map</h2>
+          <div className="modal-header-actions">
+            <button type="button" className="command-button" onClick={copyAsTsv}>
+              {copied ? "Copied!" : "Copy as TSV"}
+            </button>
+            <button
+              type="button"
+              className="modal-close-btn"
+              aria-label="Close resource map"
+              onClick={onClose}
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+        <div className="resource-map-scroll">
+          <table className="resource-map-table">
+            <thead>
+              <tr>
+                <th className="rm-sticky rm-col-id">ID</th>
+                <th className="rm-sticky rm-col-name">Name</th>
+                <th>Role / Title</th>
+                <th>FTE Equivalent</th>
+                <th>Location</th>
+                <th>Team / Squad</th>
+                <th>Project</th>
+                <th>Manager</th>
+                {months.map((m) => (
+                  <th key={m.label} className="rm-month-head">{m.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => (
+                <tr key={i}>
+                  <td className="rm-sticky rm-col-id">{row.engineerId}</td>
+                  <td className="rm-sticky rm-col-name">{row.engineerName}</td>
+                  <td />
+                  <td />
+                  <td />
+                  <td>{row.squadName}</td>
+                  <td>{row.projectName}</td>
+                  <td />
+                  {row.monthCells.map((v, j) => (
+                    <td key={j} className="rm-cell">{v ? "1" : ""}</td>
+                  ))}
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={8 + months.length} className="rm-empty">
+                    No engineer members defined. Add members to squads to populate the resource map.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1444,6 +1603,11 @@ function EditorPanel({
   onSquadUpdate,
   onSquadRemove,
   squadDeleteError,
+  expandedSquadId,
+  onToggleSquadExpand,
+  onSquadAddMember,
+  onSquadUpdateMember,
+  onSquadRemoveMember,
 }: {
   scenario: ScenarioFileV1;
   selectedAssignment?: Assignment;
@@ -1471,6 +1635,11 @@ function EditorPanel({
   onSquadUpdate: (squadId: string, patch: Partial<Pick<Squad, "name" | "capacityFte" | "color">>) => void;
   onSquadRemove: (squadId: string) => void;
   squadDeleteError: { squadId: string; message: string } | null;
+  expandedSquadId: string | null;
+  onToggleSquadExpand: (squadId: string) => void;
+  onSquadAddMember: (squadId: string) => void;
+  onSquadUpdateMember: (squadId: string, index: number, patch: Partial<Engineer>) => void;
+  onSquadRemoveMember: (squadId: string, index: number) => void;
 }) {
   const mode = selectedAssignment ? "assignment" : selectedProject ? "project" : "none";
 
@@ -1503,9 +1672,14 @@ function EditorPanel({
       <SquadsEditorSection
         squads={scenario.squads}
         deleteError={squadDeleteError}
+        expandedSquadId={expandedSquadId}
+        onToggleExpand={onToggleSquadExpand}
         onUpdate={onSquadUpdate}
         onRemove={onSquadRemove}
         onAdd={onSquadAdd}
+        onAddMember={onSquadAddMember}
+        onUpdateMember={onSquadUpdateMember}
+        onRemoveMember={onSquadRemoveMember}
       />
 
       {mode === "none" ? (
@@ -1708,15 +1882,25 @@ function EditorPanel({
 function SquadsEditorSection({
   squads,
   deleteError,
+  expandedSquadId,
+  onToggleExpand,
   onUpdate,
   onRemove,
   onAdd,
+  onAddMember,
+  onUpdateMember,
+  onRemoveMember,
 }: {
   squads: Squad[];
   deleteError: { squadId: string; message: string } | null;
+  expandedSquadId: string | null;
+  onToggleExpand: (squadId: string) => void;
   onUpdate: (squadId: string, patch: Partial<Pick<Squad, "name" | "capacityFte" | "color">>) => void;
   onRemove: (squadId: string) => void;
   onAdd: () => void;
+  onAddMember: (squadId: string) => void;
+  onUpdateMember: (squadId: string, index: number, patch: Partial<Engineer>) => void;
+  onRemoveMember: (squadId: string, index: number) => void;
 }) {
   const [open, setOpen] = useState(true);
 
@@ -1734,39 +1918,55 @@ function SquadsEditorSection({
       {open ? (
         <>
           {squads.map((squad) => (
-            <div key={squad.id} className="squad-row">
-              <input
-                type="color"
-                className="squad-color-swatch"
-                value={squad.color ?? "#0f766e"}
-                aria-label={`Colour for ${squad.name}`}
-                onChange={(event) => onUpdate(squad.id, { color: event.target.value })}
-              />
-              <input
-                className="squad-name-input"
-                value={squad.name}
-                aria-label={`Name for ${squad.name}`}
-                onChange={(event) => onUpdate(squad.id, { name: event.target.value })}
-              />
-              <input
-                type="number"
-                className="squad-fte-input"
-                min="0.5"
-                step="0.5"
-                value={squad.capacityFte}
-                aria-label={`FTE capacity for ${squad.name}`}
-                onChange={(event) => onUpdate(squad.id, { capacityFte: Number(event.target.value) })}
-              />
-              <button
-                type="button"
-                className="squad-delete-btn"
-                aria-label={`Delete squad ${squad.name}`}
-                onClick={() => onRemove(squad.id)}
-              >
-                <Trash2 size={14} />
-              </button>
+            <div key={squad.id} className="squad-row-group">
+              <div className="squad-row">
+                <button
+                  type="button"
+                  className="squad-expand-btn"
+                  aria-label={`${expandedSquadId === squad.id ? "Collapse" : "Expand"} members of ${squad.name}`}
+                  onClick={() => onToggleExpand(squad.id)}
+                >
+                  {expandedSquadId === squad.id ? (
+                    <ChevronDown size={12} />
+                  ) : (
+                    <ChevronRight size={12} />
+                  )}
+                </button>
+                <input
+                  type="color"
+                  className="squad-color-swatch"
+                  value={squad.color ?? "#0f766e"}
+                  aria-label={`Colour for ${squad.name}`}
+                  onChange={(event) => onUpdate(squad.id, { color: event.target.value })}
+                />
+                <input
+                  className="squad-name-input"
+                  value={squad.name}
+                  aria-label={`Name for ${squad.name}`}
+                  onChange={(event) => onUpdate(squad.id, { name: event.target.value })}
+                />
+                <span className="squad-member-count">
+                  {squad.members != null ? `${squad.members.length} mbr` : "—"}
+                </span>
+                <button
+                  type="button"
+                  className="squad-delete-btn"
+                  aria-label={`Delete squad ${squad.name}`}
+                  onClick={() => onRemove(squad.id)}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
               {deleteError?.squadId === squad.id ? (
                 <p className="squad-delete-error">{deleteError.message}</p>
+              ) : null}
+              {expandedSquadId === squad.id ? (
+                <SquadMemberList
+                  members={squad.members ?? []}
+                  onAdd={() => onAddMember(squad.id)}
+                  onUpdate={(idx, patch) => onUpdateMember(squad.id, idx, patch)}
+                  onRemove={(idx) => onRemoveMember(squad.id, idx)}
+                />
               ) : null}
             </div>
           ))}
@@ -1779,6 +1979,55 @@ function SquadsEditorSection({
     </div>
   );
 }
+
+function SquadMemberList({
+  members,
+  onAdd,
+  onUpdate,
+  onRemove,
+}: {
+  members: Engineer[];
+  onAdd: () => void;
+  onUpdate: (index: number, patch: Partial<Engineer>) => void;
+  onRemove: (index: number) => void;
+}) {
+  return (
+    <div className="squad-member-list">
+      {members.map((member, i) => (
+        <div key={i} className="squad-member-row">
+          <input
+            type="number"
+            className="squad-member-id"
+            value={member.id || ""}
+            placeholder="ID"
+            aria-label="Engineer ID"
+            onChange={(event) => onUpdate(i, { id: Number(event.target.value) })}
+          />
+          <input
+            className="squad-member-name"
+            value={member.name}
+            placeholder="Name"
+            aria-label="Engineer name"
+            onChange={(event) => onUpdate(i, { name: event.target.value })}
+          />
+          <button
+            type="button"
+            className="squad-delete-btn"
+            aria-label={`Remove ${member.name || "member"}`}
+            onClick={() => onRemove(i)}
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      ))}
+      <button type="button" className="small-command" onClick={onAdd}>
+        <Plus size={12} />
+        Add member
+      </button>
+    </div>
+  );
+}
+
 
 function InfoIcon({ tooltip }: { tooltip: string }) {
   return (

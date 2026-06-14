@@ -110,14 +110,13 @@ describe("Portfolio Scenario Planner app", () => {
     expect(track.querySelector(".milestone-marker")).toBeNull();
   });
 
-  it("shows all squads with name, FTE, and colour inputs in the editor panel", () => {
+  it("shows all squads with name and colour inputs in the editor panel", () => {
     render(<App />);
     // sample scenario has squads "Squad A" and "Squad B"
     expect(screen.getByRole("textbox", { name: /name for squad a/i })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: /name for squad b/i })).toBeInTheDocument();
-    // Each squad row has a number input for FTE
-    const fteInputs = screen.getAllByRole("spinbutton");
-    expect(fteInputs.length).toBeGreaterThanOrEqual(2);
+    // Each squad row shows a member count badge instead of an FTE input
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
   });
 
   it("updates squad name immediately when edited", async () => {

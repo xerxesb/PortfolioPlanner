@@ -23,11 +23,17 @@ export interface ScenarioFileV1 {
   assignments: Assignment[];
 }
 
+export interface Engineer {
+  id: number;
+  name: string;
+}
+
 export interface Squad {
   id: string;
   name: string;
   capacityFte: number;
   color?: string;
+  members?: Engineer[];
 }
 
 export interface Project {
