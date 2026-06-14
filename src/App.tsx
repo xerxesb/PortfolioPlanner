@@ -1883,10 +1883,24 @@ function ProjectSprintView({
             </div>
             {timeline.map((key) => {
               const cell = heatmap.byProject[project.id]?.[key];
-              if (!cell) return <div className={`capacity-cell resourcing-unresourced${key === selectedSprintKey ? " col-selected" : ""}`} key={key} />;
+              const milestonesHere = project.milestones.filter((m) => m.dateKey === key);
+              const milestoneClass = milestonesHere.length > 0 ? " capacity-cell--milestone" : "";
+              const milestoneTooltip = milestonesHere.length > 0 ? (
+                <span className="cell-milestone-tooltip">
+                  {milestonesHere.map((m) => (
+                    <span key={m.id} style={{ display: "block" }}>◆ {m.name} · {m.requiredPercent}% required</span>
+                  ))}
+                </span>
+              ) : null;
+              if (!cell) return (
+                <div className={`capacity-cell resourcing-unresourced${milestoneClass}${key === selectedSprintKey ? " col-selected" : ""}`} key={key}>
+                  {milestoneTooltip}
+                </div>
+              );
               return (
-                <div className={`capacity-cell resourcing-${cell.status}${key === selectedSprintKey ? " col-selected" : ""}`} key={key}>
+                <div className={`capacity-cell resourcing-${cell.status}${milestoneClass}${key === selectedSprintKey ? " col-selected" : ""}`} key={key}>
                   {cell.fteSprints > 0 ? cell.fteSprints : "–"}
+                  {milestoneTooltip}
                 </div>
               );
             })}
