@@ -153,6 +153,7 @@ export default function App() {
   const [assignmentMenu, setAssignmentMenu] = useState<AssignmentContextMenu | null>(null);
   const [laneMenu, setLaneMenu] = useState<LaneContextMenu | null>(null);
   const [selectedSprintKey, setSelectedSprintKey] = useState<TimeKey | null>(null);
+  const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(new Set());
   const boardRef = useRef<HTMLDivElement | null>(null);
   const capacityPanelRef = useRef<HTMLElement | null>(null);
 
@@ -569,6 +570,22 @@ export default function App() {
     setSelectedAssignmentId("");
   }
 
+  function toggleCollapsed(id: string) {
+    setCollapsedProjectIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function collapseAll() {
+    setCollapsedProjectIds(new Set(scenario.projects.map((p) => p.id)));
+  }
+
+  function expandAll() {
+    setCollapsedProjectIds(new Set());
+  }
+
   function setViewStart(yy: string) {
     updateScenario((current) => ({
       ...current,
@@ -622,6 +639,10 @@ export default function App() {
             <div>
               <h2>Project sequencing</h2>
             </div>
+            <div className="collapse-toggles">
+              <button type="button" className="command-button" onClick={expandAll}>Expand all</button>
+              <button type="button" className="command-button" onClick={collapseAll}>Collapse all</button>
+            </div>
             <span>{timeline[0]} to {timeline.at(-1)}</span>
           </div>
           <div className="range-selectors">
@@ -663,6 +684,8 @@ export default function App() {
                 timeline={timeline}
                 selectedAssignmentId={selectedAssignmentId}
                 selectedProjectId={selectedAssignmentId ? "" : selectedProjectId}
+                isCollapsed={collapsedProjectIds.has(project.id)}
+                onToggleCollapsed={toggleCollapsed}
                 onSelectProject={selectProject}
                 onSelectAssignment={setSelectedAssignmentId}
                 onAssignmentPointerDown={startDrag}
@@ -877,6 +900,8 @@ function ProjectLane({
   timeline,
   selectedAssignmentId,
   selectedProjectId,
+  isCollapsed,
+  onToggleCollapsed,
   onSelectProject,
   onSelectAssignment,
   onAssignmentPointerDown,
@@ -892,6 +917,8 @@ function ProjectLane({
   timeline: TimeKey[];
   selectedAssignmentId: string;
   selectedProjectId: string;
+  isCollapsed: boolean;
+  onToggleCollapsed: (id: string) => void;
   onSelectProject: (id: string) => void;
   onSelectAssignment: (id: string) => void;
   onAssignmentPointerDown: (
@@ -916,6 +943,54 @@ function ProjectLane({
     (assignment) => assignment.projectId === project.id,
   );
 
+  if (isCollapsed) {
+    return (
+      <>
+        <button
+          type="button"
+          className={`project-label project-label--collapsed${selectedProjectId === project.id ? " selected" : ""}`}
+          onClick={() => onSelectProject(project.id)}
+        >
+          <span className="collapse-chevron" onClick={(e) => { e.stopPropagation(); onToggleCollapsed(project.id); }}>
+            <ChevronRight size={12} />
+          </span>
+          <span className="project-label-name">{project.name}</span>
+        </button>
+        <div
+          className="project-track project-track--collapsed"
+          data-testid={`track-${project.id}`}
+        >
+          {projectAssignments.map((assignment) => {
+            const squad = scenario.squads.find((candidate) => candidate.id === assignment.squadId);
+            const start = timeline.indexOf(assignment.startKey);
+            const finish = timeline.indexOf(assignment.finishKey);
+            const duration = finish - start + 1;
+            if (!squad || start < 0 || finish < 0) return null;
+            return (
+              <div
+                key={assignment.id}
+                className="assignment-bar--mini"
+                style={{
+                  gridColumn: `${start + 1} / span ${duration}`,
+                  backgroundColor: squad.color,
+                }}
+                title={`${squad.name}: ${assignment.startKey} → ${assignment.finishKey}`}
+              />
+            );
+          })}
+          {project.milestones.map((milestone) => (
+            <span
+              key={milestone.id}
+              className="milestone-marker--mini"
+              style={{ left: `${((timeline.indexOf(milestone.dateKey) + 0.5) / timeline.length) * 100}%` }}
+              title={`${milestone.name}: ${milestone.dateKey}`}
+            />
+          ))}
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <button
@@ -923,6 +998,9 @@ function ProjectLane({
         className={`project-label${selectedProjectId === project.id ? " selected" : ""}`}
         onClick={() => onSelectProject(project.id)}
       >
+        <span className="collapse-chevron" onClick={(e) => { e.stopPropagation(); onToggleCollapsed(project.id); }}>
+          <ChevronDown size={12} />
+        </span>
         <span>{project.name}</span>
         <small>{project.effortFteYears} FTE-years</small>
       </button>

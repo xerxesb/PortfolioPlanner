@@ -36,6 +36,7 @@ const scenarioSchema = z.object({
   scenario: z.object({
     id: z.string().min(1),
     name: z.string().min(1),
+    notes: z.string().optional(),
     createdAt: z.string().min(1),
     updatedAt: z.string().min(1),
   }),

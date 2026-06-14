@@ -309,6 +309,45 @@ h2 {
   font-weight: 700;
 }
 
+/* Collapsed label */
+.project-label--collapsed {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+  height: 22px;
+  padding: 0 8px;
+}
+
+.project-label--collapsed .project-label-name {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+
+.collapse-chevron {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+}
+
+.collapse-chevron:hover {
+  background: rgba(0, 0, 0, 0.07);
+}
+
+.collapse-toggles {
+  display: flex;
+  gap: 6px;
+}
+
 .project-track {
   position: relative;
   display: grid;
@@ -323,6 +362,39 @@ h2 {
       rgba(148, 163, 184, 0.22) calc(100% / var(--sprint-count) - 1px),
       rgba(148, 163, 184, 0.22) calc(100% / var(--sprint-count))
     );
+}
+
+/* Collapsed track */
+.project-track--collapsed {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--sprint-count), minmax(22px, 1fr));
+  min-height: 0;
+  height: 22px;
+  grid-column: span var(--sprint-count);
+  background: rgba(248, 250, 252, 0.8);
+  align-items: center;
+}
+
+.assignment-bar--mini {
+  align-self: center;
+  height: 6px;
+  margin: 0 1px;
+  border-radius: 3px;
+  opacity: 0.85;
+}
+
+.milestone-marker--mini {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  width: 7px;
+  height: 7px;
+  background: var(--danger);
+  border: 1px solid #fff;
+  border-radius: 1px;
+  z-index: 3;
+  pointer-events: none;
 }
 
 .assignment-bar {

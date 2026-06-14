@@ -7,6 +7,7 @@ export interface ScenarioFileV1 {
   scenario: {
     id: string;
     name: string;
+    notes?: string;
     createdAt: string;
     updatedAt: string;
   };
