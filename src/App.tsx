@@ -54,6 +54,7 @@ import {
   sprintDurationInclusive,
 } from "./domain/time";
 import { buildResourceMapRows, type ResourceMapRow } from "./domain/resourceMap";
+import { computeScenarioDiff, type ScenarioDiff } from "./domain/scenarioDiff";
 import type { Assignment, Engineer, Project, ScenarioFileV1, Squad, TimeKey } from "./domain/types";
 import { sampleScenario } from "./sampleScenario";
 
@@ -152,6 +153,9 @@ export default function App() {
   const [squadDeleteError, setSquadDeleteError] = useState<{ squadId: string; message: string } | null>(null);
   const [expandedSquadId, setExpandedSquadId] = useState<string | null>(null);
   const [isResourceMapOpen, setIsResourceMapOpen] = useState(false);
+  const [mainView, setMainView] = useState<"board" | "compare">("board");
+  const [baselineScenario, setBaselineScenario] = useState<ScenarioFileV1 | null>(null);
+  const [baselineFileName, setBaselineFileName] = useState<string>("");
   const [drag, setDrag] = useState<DragState | null>(null);
   const [assignmentMenu, setAssignmentMenu] = useState<AssignmentContextMenu | null>(null);
   const [laneMenu, setLaneMenu] = useState<LaneContextMenu | null>(null);
@@ -191,6 +195,10 @@ export default function App() {
   const cumulativeHeatmap = useMemo(() => calculateProjectCumulativeHeatmap(scenario), [scenario]);
   const milestoneCoverageHeatmap = useMemo(() => calculateProjectMilestoneCoverageHeatmap(scenario), [scenario]);
   const sprintHeatmap = useMemo(() => calculateProjectSprintHeatmap(scenario), [scenario]);
+  const scenarioDiff = useMemo<ScenarioDiff | null>(
+    () => (baselineScenario ? computeScenarioDiff(baselineScenario, scenario) : null),
+    [baselineScenario, scenario],
+  );
 
   useEffect(() => {
     try {
@@ -671,8 +679,31 @@ export default function App() {
             Scenario data
           </button>
         </div>
+        <nav className="main-nav">
+          <button
+            type="button"
+            className={`nav-tab${mainView === "board" ? " active" : ""}`}
+            onClick={() => setMainView("board")}
+          >
+            Board
+          </button>
+          <button
+            type="button"
+            className={`nav-tab${mainView === "compare" ? " active" : ""}`}
+            onClick={() => setMainView("compare")}
+          >
+            Compare
+            {scenarioDiff !== null &&
+              scenarioDiff.summary.addedRows + scenarioDiff.summary.removedRows + scenarioDiff.summary.changedRows > 0 && (
+              <span className="nav-tab-badge">
+                {scenarioDiff.summary.addedRows + scenarioDiff.summary.removedRows + scenarioDiff.summary.changedRows}
+              </span>
+            )}
+          </button>
+        </nav>
       </header>
 
+      {mainView === "board" ? (
       <section className="workspace-grid">
         <div className="board-column">
         <section className="board-panel" aria-label="Project sequencing board">
@@ -879,6 +910,15 @@ export default function App() {
           />
         </aside>
       </section>
+      ) : (
+        <ComparePanel
+          baseline={baselineScenario}
+          current={scenario}
+          diff={scenarioDiff}
+          baselineFileName={baselineFileName}
+          onLoadBaseline={(s, name) => { setBaselineScenario(s); setBaselineFileName(name); }}
+        />
+      )}
       <footer className="app-footer">
         <span>© 2026 Xerxes Battiwalla &nbsp;({__GIT_SHA__})</span>
       </footer>
@@ -904,6 +944,16 @@ export default function App() {
       ) : null}
     </main>
   );
+}
+
+function ComparePanel(_props: {
+  baseline: ScenarioFileV1 | null;
+  current: ScenarioFileV1;
+  diff: ScenarioDiff | null;
+  baselineFileName: string;
+  onLoadBaseline: (s: ScenarioFileV1, name: string) => void;
+}) {
+  return <div className="compare-empty"><p>Compare panel coming soon.</p></div>;
 }
 
 function ResourceMapModal({
