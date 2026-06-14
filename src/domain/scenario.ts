@@ -51,8 +51,11 @@ const scenarioSchema = z.object({
     z.object({
       id: z.string().min(1),
       name: z.string().min(1),
-      capacityFte: z.number().positive(),
+      capacityFte: z.number().nonnegative(),
       color: z.string().optional(),
+      members: z
+        .array(z.object({ id: z.number(), name: z.string() }))
+        .optional(),
     }),
   ),
   projects: z.array(projectSchema),

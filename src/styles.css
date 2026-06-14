@@ -794,8 +794,7 @@ h2 {
 
 .squad-row {
   display: grid;
-  grid-template-columns: 28px 1fr 52px 32px;
-  grid-template-rows: auto auto;
+  grid-template-columns: 20px 28px 1fr auto 32px;
   gap: 4px;
   align-items: center;
 }
@@ -1442,6 +1441,10 @@ h2 {
   gap: 3px;
   border-left: 2px solid var(--line);
   padding-left: 8px;
+}
+
+.squad-member-list > .small-command {
+  align-self: flex-start;
 }
 
 .squad-member-row {
