@@ -52,7 +52,7 @@ function sprintIndicesForMonth(monthIdx: number): number[] {
  * Fraction of the calendar month covered by [assignStart, assignEnd] (both
  * expressed as sprint indices from toSprintIndex). Returns a value in [0, 1].
  */
-function fractionOfMonth(
+export function fractionOfMonth(
   monthIdx: number,
   assignStart: number,
   assignEnd: number,
@@ -60,6 +60,23 @@ function fractionOfMonth(
   const indices = sprintIndicesForMonth(monthIdx);
   const covered = indices.filter((s) => s >= assignStart && s <= assignEnd).length;
   return covered / indices.length;
+}
+
+export function buildMonthRange(assignments: Assignment[]): CalendarMonth[] {
+  if (assignments.length === 0) return [];
+  let minIdx = Infinity;
+  let maxIdx = -Infinity;
+  for (const a of assignments) {
+    const s = sprintToCalendarMonthIndex(a.startKey);
+    const e = sprintToCalendarMonthIndex(a.finishKey);
+    if (s < minIdx) minIdx = s;
+    if (e > maxIdx) maxIdx = e;
+  }
+  const months: CalendarMonth[] = [];
+  for (let i = minIdx; i <= maxIdx; i++) {
+    months.push(indexToCalendarMonth(i));
+  }
+  return months;
 }
 
 export function buildResourceMapRows(
@@ -71,19 +88,7 @@ export function buildResourceMapRows(
     return { months: [], rows: [] };
   }
 
-  let minIdx = Infinity;
-  let maxIdx = -Infinity;
-  for (const a of assignments) {
-    const s = sprintToCalendarMonthIndex(a.startKey);
-    const e = sprintToCalendarMonthIndex(a.finishKey);
-    if (s < minIdx) minIdx = s;
-    if (e > maxIdx) maxIdx = e;
-  }
-
-  const months: CalendarMonth[] = [];
-  for (let i = minIdx; i <= maxIdx; i++) {
-    months.push(indexToCalendarMonth(i));
-  }
+  const months = buildMonthRange(assignments);
 
   const squadMap = new Map(squads.map((s) => [s.id, s]));
   const projectMap = new Map(projects.map((p) => [p.id, p]));
