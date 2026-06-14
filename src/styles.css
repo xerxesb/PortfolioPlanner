@@ -1454,13 +1454,13 @@ h2 {
 }
 
 .squad-member-id {
-  width: 68px;
-  flex-shrink: 0;
+  flex: 0 0 68px;
+  max-width: 68px;
 }
 
 .squad-member-name {
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 0;
+  min-width: 60px;
 }
 
 /* ── Resource map modal ─────────────────────────────────────────── */
