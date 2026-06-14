@@ -39,6 +39,8 @@ export interface Squad {
 export interface Project {
   id: string;
   name: string;
+  alias?: string;
+  projectCode?: string;
   effortFteYears: number;
   targetStartKey?: TimeKey;
   targetFinishKey: TimeKey;

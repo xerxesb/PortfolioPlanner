@@ -1509,6 +1509,16 @@ h2 {
   align-items: center;
 }
 
+.rm-alias-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
 .modal-close-btn {
   background: none;
   border: none;

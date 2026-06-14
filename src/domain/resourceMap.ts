@@ -12,6 +12,8 @@ export interface ResourceMapRow {
   engineerName: string;
   squadName: string;
   projectName: string;
+  projectAlias?: string;
+  projectCode?: string;
   monthCells: number[];  // 0 = not allocated, 0.5 = half month, 1 = full month
 }
 
@@ -108,6 +110,8 @@ export function buildResourceMapRows(
         engineerName: member.name,
         squadName: squad.name,
         projectName: project.name,
+        projectAlias: project.alias,
+        projectCode: project.projectCode,
         monthCells,
       });
     }

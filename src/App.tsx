@@ -53,7 +53,7 @@ import {
   shiftTimeKey,
   sprintDurationInclusive,
 } from "./domain/time";
-import { buildResourceMapRows } from "./domain/resourceMap";
+import { buildResourceMapRows, type ResourceMapRow } from "./domain/resourceMap";
 import type { Assignment, Engineer, Project, ScenarioFileV1, Squad, TimeKey } from "./domain/types";
 import { sampleScenario } from "./sampleScenario";
 
@@ -922,6 +922,16 @@ function ResourceMapModal({
     [squads, assignments, projects],
   );
   const [copied, setCopied] = useState(false);
+  const [useAlias, setUseAlias] = useState(false);
+
+  function projectLabel(row: ResourceMapRow): string {
+    if (useAlias && row.projectAlias) {
+      return row.projectCode
+        ? `${row.projectAlias} (${row.projectCode})`
+        : row.projectAlias;
+    }
+    return row.projectName;
+  }
 
   function copyAsTsv() {
     const fixedHeaders = [
@@ -932,7 +942,7 @@ function ResourceMapModal({
     const dataRows = rows.map((row) => {
       const fixed = [
         row.engineerId, row.engineerName, "", "", "",
-        row.squadName, row.projectName, "",
+        row.squadName, projectLabel(row), "",
       ];
       const cells = row.monthCells.map((v) => (v > 0 ? String(v) : ""));
       return [...fixed, ...cells].join("\t");
@@ -950,6 +960,14 @@ function ResourceMapModal({
         <div className="modal-header">
           <h2>Resource map</h2>
           <div className="modal-header-actions">
+            <label className="rm-alias-toggle">
+              <input
+                type="checkbox"
+                checked={useAlias}
+                onChange={(e) => setUseAlias(e.target.checked)}
+              />
+              PPM name
+            </label>
             <button type="button" className="command-button" onClick={copyAsTsv}>
               {copied ? "Copied!" : "Copy as TSV"}
             </button>
@@ -989,7 +1007,7 @@ function ResourceMapModal({
                   <td />
                   <td />
                   <td>{row.squadName}</td>
-                  <td>{row.projectName}</td>
+                  <td>{projectLabel(row)}</td>
                   <td />
                   {row.monthCells.map((v, j) => (
                     <td key={j} className="rm-cell">{v > 0 ? String(v) : ""}</td>
@@ -1705,6 +1723,28 @@ function EditorPanel({
               <input
                 value={selectedProject.name}
                 onChange={(event) => onProjectChange(selectedProject.id, { name: event.target.value })}
+              />
+            </label>
+            <label>
+              PPM name (alias)
+              <input
+                value={selectedProject.alias ?? ""}
+                onChange={(event) =>
+                  onProjectChange(selectedProject.id, {
+                    alias: event.target.value || undefined,
+                  })
+                }
+              />
+            </label>
+            <label>
+              Project code
+              <input
+                value={selectedProject.projectCode ?? ""}
+                onChange={(event) =>
+                  onProjectChange(selectedProject.id, {
+                    projectCode: event.target.value || undefined,
+                  })
+                }
               />
             </label>
             <label>
