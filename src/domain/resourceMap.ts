@@ -1,4 +1,4 @@
-import { sprintToCalendarMonthIndex } from "./time";
+import { sprintToCalendarMonthIndex, toSprintIndex } from "./time";
 import type { Assignment, Project, Squad } from "./types";
 
 export interface CalendarMonth {
@@ -12,7 +12,7 @@ export interface ResourceMapRow {
   engineerName: string;
   squadName: string;
   projectName: string;
-  monthCells: boolean[];
+  monthCells: number[];  // 0 = not allocated, 0.5 = half month, 1 = full month
 }
 
 const MONTH_LABELS = [
@@ -28,6 +28,36 @@ function indexToCalendarMonth(idx: number): CalendarMonth {
     month,
     label: `${MONTH_LABELS[month - 1]}-${String(year).padStart(2, "0")}`,
   };
+}
+
+/**
+ * Returns the sprint indices (as used by toSprintIndex) that fall within the
+ * given calendar month index. Each PI spans 3 months with 4 sprints:
+ * month-within-PI 0 → sprints 1 & 2 (2 sprints), 1 → sprint 3, 2 → sprint 4.
+ */
+function sprintIndicesForMonth(monthIdx: number): number[] {
+  const year = Math.floor(monthIdx / 12);
+  const rem = monthIdx % 12;
+  const piZero = Math.floor(rem / 3); // 0-indexed PI within year
+  const monthWithinPi = rem % 3;
+  const piBase = year * 16 + piZero * 4;
+  if (monthWithinPi === 0) return [piBase, piBase + 1]; // sprints 1, 2
+  if (monthWithinPi === 1) return [piBase + 2];          // sprint 3
+  return [piBase + 3];                                    // sprint 4
+}
+
+/**
+ * Fraction of the calendar month covered by [assignStart, assignEnd] (both
+ * expressed as sprint indices from toSprintIndex). Returns a value in [0, 1].
+ */
+function fractionOfMonth(
+  monthIdx: number,
+  assignStart: number,
+  assignEnd: number,
+): number {
+  const indices = sprintIndicesForMonth(monthIdx);
+  const covered = indices.filter((s) => s >= assignStart && s <= assignEnd).length;
+  return covered / indices.length;
 }
 
 export function buildResourceMapRows(
@@ -65,13 +95,13 @@ export function buildResourceMapRows(
     const project = projectMap.get(assignment.projectId);
     if (!project) continue;
 
-    const aStart = sprintToCalendarMonthIndex(assignment.startKey);
-    const aEnd = sprintToCalendarMonthIndex(assignment.finishKey);
+    const aStart = toSprintIndex(assignment.startKey);
+    const aEnd = toSprintIndex(assignment.finishKey);
 
     for (const member of squad.members) {
       const monthCells = months.map((m) => {
-        const idx = m.year * 12 + m.month - 1;
-        return idx >= aStart && idx <= aEnd;
+        const monthIdx = m.year * 12 + m.month - 1;
+        return fractionOfMonth(monthIdx, aStart, aEnd);
       });
       rows.push({
         engineerId: member.id,

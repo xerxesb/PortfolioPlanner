@@ -934,7 +934,7 @@ function ResourceMapModal({
         row.engineerId, row.engineerName, "", "", "",
         row.squadName, row.projectName, "",
       ];
-      const cells = row.monthCells.map((v) => (v ? "1" : ""));
+      const cells = row.monthCells.map((v) => (v > 0 ? String(v) : ""));
       return [...fixed, ...cells].join("\t");
     });
     const tsv = [header, ...dataRows].join("\n");
@@ -992,7 +992,7 @@ function ResourceMapModal({
                   <td>{row.projectName}</td>
                   <td />
                   {row.monthCells.map((v, j) => (
-                    <td key={j} className="rm-cell">{v ? "1" : ""}</td>
+                    <td key={j} className="rm-cell">{v > 0 ? String(v) : ""}</td>
                   ))}
                 </tr>
               ))}
