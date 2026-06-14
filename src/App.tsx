@@ -1,13 +1,22 @@
 import {
+  Bold,
   ChevronDown,
   ChevronRight,
   Database,
   Download,
+  Eye,
   FileUp,
+  Heading2,
+  Heading3,
+  Italic,
+  List,
+  ListOrdered,
+  PenLine,
   Plus,
   RotateCcw,
   Save,
   Trash2,
+  Underline as UnderlineIcon,
   X,
 } from "lucide-react";
 import {
@@ -21,6 +30,8 @@ import {
   useRef,
   useState,
 } from "react";
+import ReactMarkdown from "react-markdown";
+import rehypeRaw from "rehype-raw";
 import {
   calculateCapacityHeatmap,
   calculateFeasibility,
@@ -141,7 +152,34 @@ export default function App() {
   const [drag, setDrag] = useState<DragState | null>(null);
   const [assignmentMenu, setAssignmentMenu] = useState<AssignmentContextMenu | null>(null);
   const [laneMenu, setLaneMenu] = useState<LaneContextMenu | null>(null);
+  const [selectedSprintKey, setSelectedSprintKey] = useState<TimeKey | null>(null);
   const boardRef = useRef<HTMLDivElement | null>(null);
+  const capacityPanelRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const board = boardRef.current;
+    const capacity = capacityPanelRef.current;
+    if (!board || !capacity) return;
+    let syncing = false;
+    function onBoardScroll() {
+      if (syncing) return;
+      syncing = true;
+      capacity!.scrollLeft = board!.scrollLeft;
+      syncing = false;
+    }
+    function onCapacityScroll() {
+      if (syncing) return;
+      syncing = true;
+      board!.scrollLeft = capacity!.scrollLeft;
+      syncing = false;
+    }
+    board.addEventListener("scroll", onBoardScroll);
+    capacity.addEventListener("scroll", onCapacityScroll);
+    return () => {
+      board.removeEventListener("scroll", onBoardScroll);
+      capacity.removeEventListener("scroll", onCapacityScroll);
+    };
+  }, []);
 
   const timeline = useMemo(() => scenarioTimeline(scenario), [scenario]);
   const feasibility = useMemo(() => calculateFeasibility(scenario), [scenario]);
@@ -565,6 +603,10 @@ export default function App() {
           <p className="eyebrow">Portfolio feasibility</p>
           <h1>Portfolio Scenario Planner</h1>
         </div>
+        <div className="topbar-scenario">
+          <p className="eyebrow">Active scenario</p>
+          <span className="topbar-scenario-name">{scenario.scenario.name}</span>
+        </div>
         <div className="topbar-actions">
           <button type="button" className="command-button" onClick={() => setIsDataModalOpen(true)}>
             <Database size={17} />
@@ -574,11 +616,11 @@ export default function App() {
       </header>
 
       <section className="workspace-grid">
+        <div className="board-column">
         <section className="board-panel" aria-label="Project sequencing board">
           <div className="panel-heading">
             <div>
               <h2>Project sequencing</h2>
-              <p>{scenario.scenario.name}</p>
             </div>
             <span>{timeline[0]} to {timeline.at(-1)}</span>
           </div>
@@ -607,7 +649,12 @@ export default function App() {
             </label>
           </div>
           <div className="planner-grid" style={timelineStyle} ref={boardRef}>
-            <TimelineHeaders timeline={timeline} fiscalYearStartMonth={scenario.calendar.financialYearStartMonth} />
+            <TimelineHeaders
+              timeline={timeline}
+              fiscalYearStartMonth={scenario.calendar.financialYearStartMonth}
+              selectedSprintKey={selectedSprintKey}
+              onSelectSprintKey={(key) => setSelectedSprintKey((prev) => (prev === key ? null : key))}
+            />
             {scenario.projects.map((project) => (
               <ProjectLane
                 key={project.id}
@@ -627,6 +674,18 @@ export default function App() {
                 pendingCreate={drag?.kind === "create" ? drag : null}
               />
             ))}
+            {selectedSprintKey !== null && (() => {
+              const col = timeline.indexOf(selectedSprintKey);
+              return col !== -1 ? (
+                <div
+                  className="planner-col-highlight"
+                  style={{
+                    gridColumn: `${col + 2} / ${col + 3}`,
+                    gridRow: "1 / span 9999",
+                  } as React.CSSProperties}
+                />
+              ) : null;
+            })()}
           </div>
           {assignmentMenu ? (
             <AssignmentContextMenuView
@@ -644,9 +703,30 @@ export default function App() {
             />
           ) : null}
         </section>
+        <ProjectResourcingPanel
+          scenario={scenario}
+          heatmap={heatmap}
+          cumulativeHeatmap={cumulativeHeatmap}
+          milestoneCoverageHeatmap={milestoneCoverageHeatmap}
+          sprintHeatmap={sprintHeatmap}
+          timeline={timeline}
+          scrollRef={capacityPanelRef}
+          selectedSprintKey={selectedSprintKey}
+          onSelectSprintKey={(key) => setSelectedSprintKey((prev) => (prev === key ? null : key))}
+        />
+        </div>
 
         <aside className="side-panel">
           <FeasibilitySummaryView feasibility={feasibility} />
+          <NotesPanel
+            notes={scenario.scenario.notes ?? ""}
+            onNotesChange={(notes) =>
+              updateScenario((current) => ({
+                ...current,
+                scenario: { ...current.scenario, notes },
+              }))
+            }
+          />
           <EditorPanel
             scenario={scenario}
             selectedAssignment={selectedAssignment}
@@ -730,15 +810,6 @@ export default function App() {
           />
         </aside>
       </section>
-
-      <ProjectResourcingPanel
-        scenario={scenario}
-        heatmap={heatmap}
-        cumulativeHeatmap={cumulativeHeatmap}
-        milestoneCoverageHeatmap={milestoneCoverageHeatmap}
-        sprintHeatmap={sprintHeatmap}
-        timeline={timeline}
-      />
       <footer className="app-footer">
         <span>© 2026 Xerxes Battiwalla &nbsp;(v {__GIT_SHA__})</span>
       </footer>
@@ -761,9 +832,13 @@ export default function App() {
 function TimelineHeaders({
   timeline,
   fiscalYearStartMonth,
+  selectedSprintKey,
+  onSelectSprintKey,
 }: {
   timeline: TimeKey[];
   fiscalYearStartMonth: number;
+  selectedSprintKey: TimeKey | null;
+  onSelectSprintKey: (key: TimeKey) => void;
 }) {
   return (
     <>
@@ -784,7 +859,13 @@ function TimelineHeaders({
         </div>
       ))}
       {timeline.map((key) => (
-        <div className="sprint-cell" key={key}>{parseTimeKey(key).sprint}</div>
+        <div
+          className={`sprint-cell${key === selectedSprintKey ? " col-selected" : ""}`}
+          key={key}
+          onClick={(e) => { e.stopPropagation(); onSelectSprintKey(key); }}
+        >
+          {parseTimeKey(key).sprint}
+        </div>
       ))}
     </>
   );
@@ -1035,12 +1116,183 @@ function LaneContextMenuView({
   );
 }
 
+function NotesPanel({
+  notes,
+  onNotesChange,
+}: {
+  notes: string;
+  onNotesChange: (notes: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [preview, setPreview] = useState(false);
+  const [textareaHeight, setTextareaHeight] = useState<number | undefined>(undefined);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (preview) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => {
+      setTextareaHeight(el.offsetHeight);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [preview]);
+
+  function wrap(before: string, after: string) {
+    const el = textareaRef.current;
+    if (!el) return;
+    const { selectionStart: s, selectionEnd: e, value } = el;
+    const selected = value.slice(s, e) || "text";
+    const next = value.slice(0, s) + before + selected + after + value.slice(e);
+    onNotesChange(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.selectionStart = s + before.length;
+      el.selectionEnd = s + before.length + (value.slice(s, e) ? selected.length : selected.length);
+    });
+  }
+
+  function prefixLine(prefix: string) {
+    const el = textareaRef.current;
+    if (!el) return;
+    const { selectionStart, value } = el;
+    const lineStart = value.lastIndexOf("\n", selectionStart - 1) + 1;
+    const lineEndIdx = value.indexOf("\n", selectionStart);
+    const lineEnd = lineEndIdx === -1 ? value.length : lineEndIdx;
+    const line = value.slice(lineStart, lineEnd);
+    const updated = line.startsWith(prefix) ? line.slice(prefix.length) : prefix + line;
+    const delta = updated.length - line.length;
+    onNotesChange(value.slice(0, lineStart) + updated + value.slice(lineEnd));
+    requestAnimationFrame(() => {
+      el.focus();
+      el.selectionStart = el.selectionEnd = selectionStart + delta;
+    });
+  }
+
+  function handleTabKey(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key !== "Tab") return;
+    e.preventDefault();
+    const el = e.currentTarget;
+    const { selectionStart, selectionEnd, value } = el;
+    const INDENT = "  ";
+    if (e.shiftKey) {
+      const lineStart = value.lastIndexOf("\n", selectionStart - 1) + 1;
+      const lineEnd = selectionEnd === selectionStart
+        ? selectionEnd
+        : value.indexOf("\n", selectionEnd - 1) === -1 ? value.length : value.indexOf("\n", selectionEnd - 1);
+      const block = value.slice(lineStart, lineEnd);
+      let removed = 0;
+      const updated = block.replace(/^( {1,2})/gm, (m) => { removed += m.length; return ""; });
+      onNotesChange(value.slice(0, lineStart) + updated + value.slice(lineEnd));
+      requestAnimationFrame(() => {
+        el.selectionStart = Math.max(lineStart, selectionStart - (selectionStart === selectionEnd ? removed : 0));
+        el.selectionEnd = Math.max(lineStart, selectionEnd - removed);
+      });
+    } else if (selectionStart === selectionEnd) {
+      onNotesChange(value.slice(0, selectionStart) + INDENT + value.slice(selectionEnd));
+      requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = selectionStart + INDENT.length; });
+    } else {
+      const lineStart = value.lastIndexOf("\n", selectionStart - 1) + 1;
+      const lineEnd = value.indexOf("\n", selectionEnd - 1) === -1 ? value.length : value.indexOf("\n", selectionEnd - 1);
+      const block = value.slice(lineStart, lineEnd);
+      const updated = block.replace(/^/gm, INDENT);
+      const added = updated.length - block.length;
+      onNotesChange(value.slice(0, lineStart) + updated + value.slice(lineEnd));
+      requestAnimationFrame(() => {
+        el.selectionStart = selectionStart + INDENT.length;
+        el.selectionEnd = selectionEnd + added;
+      });
+    }
+  }
+
+  type ToolBtn = { title: string; icon: React.ReactNode; action: () => void };
+  const tools: ToolBtn[] = [
+    { title: "Bold", icon: <Bold size={13} />, action: () => wrap("**", "**") },
+    { title: "Italic", icon: <Italic size={13} />, action: () => wrap("*", "*") },
+    { title: "Underline", icon: <UnderlineIcon size={13} />, action: () => wrap("<u>", "</u>") },
+  ];
+  const lineTools: ToolBtn[] = [
+    { title: "Heading 2", icon: <Heading2 size={13} />, action: () => prefixLine("## ") },
+    { title: "Heading 3", icon: <Heading3 size={13} />, action: () => prefixLine("### ") },
+    { title: "Bullet list", icon: <List size={13} />, action: () => prefixLine("- ") },
+    { title: "Numbered list", icon: <ListOrdered size={13} />, action: () => prefixLine("1. ") },
+  ];
+
+  return (
+    <section className="panel-card">
+      <button
+        type="button"
+        className="panel-heading compact notes-heading"
+        onClick={() => setExpanded((e) => !e)}
+        aria-expanded={expanded}
+      >
+        <h2>Assumptions &amp; notes</h2>
+        <ChevronDown size={14} className={expanded ? "rotate-180" : ""} />
+      </button>
+      {expanded && (
+        <div className="notes-body">
+          <div className="notes-toolbar">
+            {tools.map((t) => (
+              <button
+                key={t.title}
+                type="button"
+                className="notes-tool"
+                title={t.title}
+                onMouseDown={(e) => { e.preventDefault(); t.action(); }}
+              >{t.icon}</button>
+            ))}
+            <div className="notes-toolbar-sep" />
+            {lineTools.map((t) => (
+              <button
+                key={t.title}
+                type="button"
+                className="notes-tool"
+                title={t.title}
+                onMouseDown={(e) => { e.preventDefault(); t.action(); }}
+              >{t.icon}</button>
+            ))}
+            <div className="notes-toolbar-spacer" />
+            <button
+              type="button"
+              className={`notes-tool${preview ? " active" : ""}`}
+              title={preview ? "Edit" : "Preview"}
+              onClick={() => setPreview((p) => !p)}
+            >
+              {preview ? <PenLine size={13} /> : <Eye size={13} />}
+            </button>
+          </div>
+          {preview ? (
+            <div className="notes-preview">
+              <ReactMarkdown rehypePlugins={[rehypeRaw]}>
+                {notes || "*No notes yet.*"}
+              </ReactMarkdown>
+            </div>
+          ) : (
+            <textarea
+              ref={textareaRef}
+              className="notes-textarea"
+              style={textareaHeight !== undefined ? { height: textareaHeight } : undefined}
+              value={notes}
+              onChange={(e) => onNotesChange(e.target.value)}
+              onKeyDown={handleTabKey}
+              placeholder={"Add planning assumptions, constraints, or notes here.\nUse - or \u2022 for bullets, ## for headings."}
+              spellCheck
+            />
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function FeasibilitySummaryView({
   feasibility,
 }: {
   feasibility: ReturnType<typeof calculateFeasibility>;
 }) {
   const milestones = Object.values(feasibility.milestonesById);
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <section className="panel-card">
@@ -1053,16 +1305,26 @@ function FeasibilitySummaryView({
         <Metric value={feasibility.idleSquadPiEquivalent.toFixed(1)} label="idle squad-PIs" />
         <Metric value={Math.ceil(feasibility.gapFteSprints / 16)} label="FTE-year gap" />
       </div>
-      <div className="risk-list">
-        {milestones.map((milestone) => (
-          <div className={`risk-item ${milestone.status}`} key={milestone.milestoneId}>
-            <strong>{milestone.projectName} ({milestone.name})</strong>
-            <span>
-              {statusLabel[milestone.status]} at {milestone.dateKey}. {Math.round(milestone.actualCapacity)} of {Math.round(milestone.requiredCapacity)} FTE-sprints covered.
-            </span>
-          </div>
-        ))}
-      </div>
+      <button
+        className="collapse-toggle"
+        onClick={() => setExpanded((e) => !e)}
+        aria-expanded={expanded}
+      >
+        <ChevronDown size={14} className={expanded ? "rotate-180" : ""} />
+        {expanded ? "Hide details" : "Show details"}
+      </button>
+      {expanded && (
+        <div className="risk-list">
+          {milestones.map((milestone) => (
+            <div className={`risk-item ${milestone.status}`} key={milestone.milestoneId}>
+              <strong>{milestone.projectName} ({milestone.name})</strong>
+              <span>
+                {statusLabel[milestone.status]} at {milestone.dateKey}. {Math.round(milestone.actualCapacity)} of {Math.round(milestone.requiredCapacity)} FTE-sprints covered.
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -1453,16 +1715,26 @@ function TeamCapacityGrid({
   scenario,
   heatmap,
   timeline,
+  selectedSprintKey,
+  onSelectSprintKey,
 }: {
   scenario: ScenarioFileV1;
   heatmap: ReturnType<typeof calculateCapacityHeatmap>;
   timeline: TimeKey[];
+  selectedSprintKey: TimeKey | null;
+  onSelectSprintKey: (key: TimeKey) => void;
 }) {
   return (
     <div className="capacity-grid" style={{ "--sprint-count": timeline.length } as React.CSSProperties}>
       <div className="capacity-label">Squad</div>
       {timeline.map((key) => (
-        <div className="capacity-head" key={key}>{key}</div>
+        <div
+          className={`capacity-head${key === selectedSprintKey ? " col-selected" : ""}`}
+          key={key}
+          onClick={(e) => { e.stopPropagation(); onSelectSprintKey(key); }}
+        >
+          {key}
+        </div>
       ))}
       {scenario.squads.map((squad) => (
         <Fragment key={squad.id}>
@@ -1474,7 +1746,7 @@ function TeamCapacityGrid({
               .filter(Boolean)
               .join(" + ");
             return (
-              <div className={`capacity-cell ${cell.status}`} key={`${squad.id}-${key}`}>
+              <div className={`capacity-cell ${cell.status}${key === selectedSprintKey ? " col-selected" : ""}`} key={`${squad.id}-${key}`}>
                 {cell.status === "idle" ? "-" : shortNames}
               </div>
             );
@@ -1485,21 +1757,48 @@ function TeamCapacityGrid({
   );
 }
 
+function milestoneCellStyle(cell: { status: string; percent: number }): React.CSSProperties | undefined {
+  if (cell.status === "over" || cell.status === "complete") {
+    return { background: "#22c55e", color: "white" };
+  }
+  if (cell.percent >= 95) {
+    // Interpolate from light green (#bbf7d0) at 95% to full green (#22c55e) at 100%
+    const t = Math.min((cell.percent - 95) / 5, 1);
+    const r = Math.round(187 + (34 - 187) * t);
+    const g = Math.round(247 + (197 - 247) * t);
+    const b = Math.round(208 + (94 - 208) * t);
+    return { background: `rgb(${r},${g},${b})`, color: t > 0.5 ? "white" : "#166534" };
+  }
+  return undefined;
+}
+
 function ProjectCumulativeView({
   scenario,
   heatmap,
   timeline,
+  selectedSprintKey,
+  onSelectSprintKey,
+  milestoneMode = false,
 }: {
   scenario: ScenarioFileV1;
   heatmap: ProjectCumulativeHeatmap;
   timeline: TimeKey[];
+  selectedSprintKey: TimeKey | null;
+  onSelectSprintKey: (key: TimeKey) => void;
+  milestoneMode?: boolean;
 }) {
   return (
     <>
       <div className="capacity-grid" style={{ "--sprint-count": timeline.length } as React.CSSProperties}>
         <div className="capacity-label">Project</div>
         {timeline.map((key) => (
-          <div className="capacity-head" key={key}>{key}</div>
+          <div
+            className={`capacity-head${key === selectedSprintKey ? " col-selected" : ""}`}
+            key={key}
+            onClick={(e) => { e.stopPropagation(); onSelectSprintKey(key); }}
+          >
+            {key}
+          </div>
         ))}
         {scenario.projects.map((project) => (
           <Fragment key={project.id}>
@@ -1509,10 +1808,30 @@ function ProjectCumulativeView({
             </div>
             {timeline.map((key) => {
               const cell = heatmap.byProject[project.id]?.[key];
-              if (!cell) return <div className="capacity-cell resourcing-unresourced" key={key} />;
+              const milestonesHere = project.milestones.filter((m) => m.dateKey === key);
+              const milestoneClass = milestonesHere.length > 0 ? " capacity-cell--milestone" : "";
+              const milestoneTooltip = milestonesHere.length > 0 ? (
+                <span className="cell-milestone-tooltip">
+                  {milestonesHere.map((m) => (
+                    <span key={m.id} style={{ display: "block" }}>◆ {m.name} · {m.requiredPercent}% required</span>
+                  ))}
+                </span>
+              ) : null;
+              if (!cell) return (
+                <div className={`capacity-cell resourcing-unresourced${milestoneClass}${key === selectedSprintKey ? " col-selected" : ""}`} key={key}>
+                  {milestoneTooltip}
+                </div>
+              );
+              const inlineStyle = milestoneMode ? milestoneCellStyle(cell) : undefined;
+              const statusClass = (milestoneMode && inlineStyle) ? "" : ` resourcing-${cell.status}`;
               return (
-                <div className={`capacity-cell resourcing-${cell.status}`} key={key}>
+                <div
+                  className={`capacity-cell${statusClass}${milestoneClass}${key === selectedSprintKey ? " col-selected" : ""}`}
+                  style={inlineStyle}
+                  key={key}
+                >
                   {cell.percent > 0 ? `${Math.round(cell.percent)}%` : ""}
+                  {milestoneTooltip}
                 </div>
               );
             })}
@@ -1523,7 +1842,7 @@ function ProjectCumulativeView({
         <span className="resourcing-legend-item"><span className="resourcing-swatch resourcing-unresourced" />No coverage</span>
         <span className="resourcing-legend-item"><span className="resourcing-swatch resourcing-in-progress" />In progress</span>
         <span className="resourcing-legend-item"><span className="resourcing-swatch resourcing-complete" />Fully resourced</span>
-        <span className="resourcing-legend-item"><span className="resourcing-swatch resourcing-over" />Over-resourced</span>
+        {!milestoneMode && <span className="resourcing-legend-item"><span className="resourcing-swatch resourcing-over" />Over-resourced</span>}
         <span className="resourcing-legend-item"><span className="resourcing-swatch resourcing-at-risk" />At risk (past target)</span>
       </div>
     </>
@@ -1534,17 +1853,27 @@ function ProjectSprintView({
   scenario,
   heatmap,
   timeline,
+  selectedSprintKey,
+  onSelectSprintKey,
 }: {
   scenario: ScenarioFileV1;
   heatmap: ProjectSprintHeatmap;
   timeline: TimeKey[];
+  selectedSprintKey: TimeKey | null;
+  onSelectSprintKey: (key: TimeKey) => void;
 }) {
   return (
     <>
       <div className="capacity-grid" style={{ "--sprint-count": timeline.length } as React.CSSProperties}>
         <div className="capacity-label">Project</div>
         {timeline.map((key) => (
-          <div className="capacity-head" key={key}>{key}</div>
+          <div
+            className={`capacity-head${key === selectedSprintKey ? " col-selected" : ""}`}
+            key={key}
+            onClick={(e) => { e.stopPropagation(); onSelectSprintKey(key); }}
+          >
+            {key}
+          </div>
         ))}
         {scenario.projects.map((project) => (
           <Fragment key={project.id}>
@@ -1554,9 +1883,9 @@ function ProjectSprintView({
             </div>
             {timeline.map((key) => {
               const cell = heatmap.byProject[project.id]?.[key];
-              if (!cell) return <div className="capacity-cell resourcing-unresourced" key={key} />;
+              if (!cell) return <div className={`capacity-cell resourcing-unresourced${key === selectedSprintKey ? " col-selected" : ""}`} key={key} />;
               return (
-                <div className={`capacity-cell resourcing-${cell.status}`} key={key}>
+                <div className={`capacity-cell resourcing-${cell.status}${key === selectedSprintKey ? " col-selected" : ""}`} key={key}>
                   {cell.fteSprints > 0 ? cell.fteSprints : "–"}
                 </div>
               );
@@ -1580,6 +1909,9 @@ function ProjectResourcingPanel({
   milestoneCoverageHeatmap,
   sprintHeatmap,
   timeline,
+  scrollRef,
+  selectedSprintKey,
+  onSelectSprintKey,
 }: {
   scenario: ScenarioFileV1;
   heatmap: ReturnType<typeof calculateCapacityHeatmap>;
@@ -1587,11 +1919,14 @@ function ProjectResourcingPanel({
   milestoneCoverageHeatmap: ProjectCumulativeHeatmap;
   sprintHeatmap: ProjectSprintHeatmap;
   timeline: TimeKey[];
+  scrollRef?: React.RefObject<HTMLElement | null>;
+  selectedSprintKey: TimeKey | null;
+  onSelectSprintKey: (key: TimeKey) => void;
 }) {
   const [activeTab, setActiveTab] = useState<"cumulative" | "milestone" | "sprint" | "team">("cumulative");
 
   return (
-    <section className="capacity-panel">
+    <section className="capacity-panel" ref={scrollRef}>
       <div className="panel-heading">
         <div>
           <h2>Project resourcing</h2>
@@ -1613,7 +1948,7 @@ function ProjectResourcingPanel({
           onClick={() => setActiveTab("milestone")}
         >
           Milestone coverage
-          <InfoIcon tooltip="Shows cumulative resourcing as a % of the next upcoming milestone's required effort. Once a milestone is covered (≥100%), the denominator switches to the next milestone. Falls back to total project effort when no future milestones remain." />
+          <InfoIcon tooltip="Shows cumulative resourcing as a % of the next upcoming milestone's required effort. Once a milestone is covered (≥100%), the denominator switches to the next milestone. Falls back to total project effort when no future milestones remain. Cells shade green from 95% and above — including over 100% — to reflect that near-full allocation counts as met." />
         </button>
         <button
           type="button"
@@ -1633,16 +1968,16 @@ function ProjectResourcingPanel({
         </button>
       </div>
       {activeTab === "cumulative" && (
-        <ProjectCumulativeView scenario={scenario} heatmap={cumulativeHeatmap} timeline={timeline} />
+        <ProjectCumulativeView scenario={scenario} heatmap={cumulativeHeatmap} timeline={timeline} selectedSprintKey={selectedSprintKey} onSelectSprintKey={onSelectSprintKey} />
       )}
       {activeTab === "milestone" && (
-        <ProjectCumulativeView scenario={scenario} heatmap={milestoneCoverageHeatmap} timeline={timeline} />
+        <ProjectCumulativeView scenario={scenario} heatmap={milestoneCoverageHeatmap} timeline={timeline} selectedSprintKey={selectedSprintKey} onSelectSprintKey={onSelectSprintKey} milestoneMode />
       )}
       {activeTab === "sprint" && (
-        <ProjectSprintView scenario={scenario} heatmap={sprintHeatmap} timeline={timeline} />
+        <ProjectSprintView scenario={scenario} heatmap={sprintHeatmap} timeline={timeline} selectedSprintKey={selectedSprintKey} onSelectSprintKey={onSelectSprintKey} />
       )}
       {activeTab === "team" && (
-        <TeamCapacityGrid scenario={scenario} heatmap={heatmap} timeline={timeline} />
+        <TeamCapacityGrid scenario={scenario} heatmap={heatmap} timeline={timeline} selectedSprintKey={selectedSprintKey} onSelectSprintKey={onSelectSprintKey} />
       )}
     </section>
   );
@@ -1743,7 +2078,8 @@ function ScenarioDataModal({
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${parsed.scenario.id}.resourceplan.json`;
+      const slug = parsed.scenario.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || parsed.scenario.id;
+      link.download = `${slug}.resourceplan.json`;
       link.click();
       URL.revokeObjectURL(url);
     } catch (e) {
