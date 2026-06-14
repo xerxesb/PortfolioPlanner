@@ -946,14 +946,216 @@ export default function App() {
   );
 }
 
-function ComparePanel(_props: {
+function ComparePanel({
+  baseline,
+  current: _current,
+  diff,
+  baselineFileName,
+  onLoadBaseline,
+}: {
   baseline: ScenarioFileV1 | null;
   current: ScenarioFileV1;
   diff: ScenarioDiff | null;
   baselineFileName: string;
   onLoadBaseline: (s: ScenarioFileV1, name: string) => void;
 }) {
-  return <div className="compare-empty"><p>Compare panel coming soon.</p></div>;
+  const [hideUnchanged, setHideUnchanged] = useState(true);
+  const [toggledSquads, setToggledSquads] = useState<Set<string>>(new Set());
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target?.result as string;
+        const parsed = importScenario(text);
+        onLoadBaseline(parsed, file.name);
+      } catch {
+        // invalid file — silently ignore
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  }
+
+  function toggleSquad(squadId: string) {
+    setToggledSquads((prev) => {
+      const next = new Set(prev);
+      if (next.has(squadId)) next.delete(squadId);
+      else next.add(squadId);
+      return next;
+    });
+  }
+
+  function isSquadExpanded(group: { squadId: string; changeCount: number }): boolean {
+    const defaultExpanded = group.changeCount > 0;
+    return toggledSquads.has(group.squadId) ? !defaultExpanded : defaultExpanded;
+  }
+
+  function formatCell(cell: import("./domain/scenarioDiff").DiffCell): React.ReactNode {
+    if (cell.status === "unchanged") {
+      return cell.baselineValue > 0 ? String(cell.baselineValue) : "";
+    }
+    if (cell.status === "added") {
+      return cell.currentValue > 0 ? (
+        <span className="diff-val-current">{cell.currentValue}</span>
+      ) : "";
+    }
+    if (cell.status === "removed") {
+      return cell.baselineValue > 0 ? (
+        <span className="diff-val-baseline">{cell.baselineValue}</span>
+      ) : "";
+    }
+    return (
+      <>
+        {cell.baselineValue > 0 && (
+          <span className="diff-val-baseline">{cell.baselineValue}</span>
+        )}
+        {cell.currentValue > 0 && (
+          <span className="diff-val-current">{cell.currentValue}</span>
+        )}
+      </>
+    );
+  }
+
+  if (!baseline || !diff) {
+    return (
+      <div className="compare-empty">
+        <p>Load a baseline <code>.resourceplan</code> file to compare it against the current scenario.</p>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json"
+          style={{ display: "none" }}
+          onChange={handleFileChange}
+        />
+        <button
+          type="button"
+          className="command-button"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          Load baseline file…
+        </button>
+      </div>
+    );
+  }
+
+  const totalChanges =
+    diff.summary.addedRows + diff.summary.removedRows + diff.summary.changedRows;
+  const fixedColCount = 3;
+
+  return (
+    <div className="compare-panel">
+      <div className="compare-header">
+        <div className="compare-header-info">
+          <span className="compare-label">Comparing against:</span>
+          <strong>{baseline.scenario.name}</strong>
+          {baselineFileName && (
+            <span className="compare-filename">({baselineFileName})</span>
+          )}
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json"
+          style={{ display: "none" }}
+          onChange={handleFileChange}
+        />
+        <button
+          type="button"
+          className="command-button"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          Change baseline…
+        </button>
+      </div>
+
+      <div className="compare-toolbar">
+        <div className="compare-summary">
+          <span className="diff-badge diff-badge-added">+{diff.summary.addedRows} added</span>
+          <span className="diff-badge diff-badge-removed">−{diff.summary.removedRows} removed</span>
+          <span className="diff-badge diff-badge-changed">~{diff.summary.changedRows} changed</span>
+          {hideUnchanged && diff.summary.unchangedRows > 0 && (
+            <span className="diff-badge diff-badge-hidden">
+              {diff.summary.unchangedRows} unchanged hidden
+            </span>
+          )}
+        </div>
+        <label className="compare-toggle">
+          <input
+            type="checkbox"
+            checked={hideUnchanged}
+            onChange={(e) => setHideUnchanged(e.target.checked)}
+          />
+          Hide unchanged rows
+        </label>
+      </div>
+
+      <div className="compare-scroll">
+        <table className="diff-table">
+          <thead>
+            <tr>
+              <th className="diff-sticky diff-col-name">Name</th>
+              <th className="diff-sticky diff-col-squad">Squad</th>
+              <th className="diff-sticky diff-col-project">Project</th>
+              {diff.months.map((m) => (
+                <th key={m.label} className="rm-month-head">{m.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {diff.squadGroups.map((group) => {
+              const expanded = isSquadExpanded(group);
+              const visibleRows = hideUnchanged
+                ? group.rows.filter((r) => r.rowStatus !== "unchanged")
+                : group.rows;
+              return (
+                <Fragment key={group.squadId}>
+                  <tr
+                    className="diff-squad-header"
+                    onClick={() => toggleSquad(group.squadId)}
+                  >
+                    <td colSpan={fixedColCount + diff.months.length}>
+                      <span className="diff-squad-chevron">
+                        {expanded ? "▾" : "▸"}
+                      </span>
+                      {group.squadName}
+                      {group.changeCount > 0 && (
+                        <span className="diff-squad-count">{group.changeCount} changes</span>
+                      )}
+                    </td>
+                  </tr>
+                  {expanded &&
+                    visibleRows.map((row, i) => (
+                      <tr
+                        key={`${row.engineerId}:${row.projectName}:${i}`}
+                        className={`diff-row diff-row-${row.rowStatus}`}
+                      >
+                        <td className="diff-sticky diff-col-name">{row.engineerName}</td>
+                        <td className="diff-sticky diff-col-squad">{row.squadName}</td>
+                        <td className="diff-sticky diff-col-project">
+                          {row.projectAlias ?? row.projectName}
+                        </td>
+                        {row.cells.map((cell, j) => (
+                          <td key={j} className={`diff-cell diff-cell-${cell.status}`}>
+                            {formatCell(cell)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+        {totalChanges === 0 && (
+          <p className="compare-no-changes">No differences found between the two scenarios.</p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function ResourceMapModal({
