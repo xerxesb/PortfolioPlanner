@@ -16,6 +16,7 @@ export interface ProjectProgress {
 export interface MilestoneFeasibility {
   milestoneId: string;
   projectId: string;
+  projectName: string;
   name: string;
   dateKey: TimeKey;
   requiredCapacity: number;
@@ -86,6 +87,7 @@ export function calculateFeasibility(scenario: ScenarioFileV1): FeasibilitySumma
       milestonesById[milestone.id] = {
         milestoneId: milestone.id,
         projectId: project.id,
+        projectName: project.name,
         name: milestone.name,
         dateKey: milestone.dateKey,
         requiredCapacity,
