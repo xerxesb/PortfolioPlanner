@@ -160,8 +160,9 @@ h2 {
 
 .workspace-grid {
   display: grid;
-  grid-template-columns: minmax(800px, 1fr) 420px;
-  gap: 18px;
+  grid-template-columns: minmax(800px, 1fr) 8px 420px;
+  gap: 0;
+  column-gap: 0;
   align-items: start;
 }
 
@@ -170,6 +171,7 @@ h2 {
   flex-direction: column;
   gap: 18px;
   min-width: 0;
+  padding-right: 18px;
 }
 
 .board-panel,
@@ -206,6 +208,44 @@ h2 {
 .side-panel {
   display: grid;
   gap: 14px;
+  min-width: 0;
+  overflow: hidden;
+  padding-left: 18px;
+  transition: opacity 0.15s ease;
+}
+
+/* Panel gripper — vertical drag/click handle between board and side panel */
+.panel-gripper {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: col-resize;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 24px;
+  width: 8px;
+  align-self: stretch;
+  position: relative;
+  z-index: 1;
+}
+
+.panel-gripper::after {
+  content: '';
+  width: 4px;
+  height: 36px;
+  border-radius: 2px;
+  background: rgba(112, 127, 151, 0.28);
+  transition: background 0.15s;
+}
+
+.panel-gripper:hover::after,
+.panel-gripper:focus-visible::after {
+  background: var(--accent, #3b82f6);
+}
+
+.panel-gripper.collapsed::after {
+  background: rgba(112, 127, 151, 0.5);
 }
 
 .planner-grid {

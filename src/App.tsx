@@ -156,6 +156,7 @@ export default function App() {
   const [mainView, setMainView] = useState<"board" | "compare">("board");
   const [baselineScenario, setBaselineScenario] = useState<ScenarioFileV1 | null>(null);
   const [baselineFileName, setBaselineFileName] = useState<string>("");
+  const [sidePanelCollapsed, setSidePanelCollapsed] = useState(false);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [assignmentMenu, setAssignmentMenu] = useState<AssignmentContextMenu | null>(null);
   const [laneMenu, setLaneMenu] = useState<LaneContextMenu | null>(null);
@@ -704,7 +705,10 @@ export default function App() {
       </header>
 
       {mainView === "board" ? (
-      <section className="workspace-grid">
+      <section
+        className="workspace-grid"
+        style={{ gridTemplateColumns: sidePanelCollapsed ? 'minmax(800px, 1fr) 8px 0' : 'minmax(800px, 1fr) 8px 420px' }}
+      >
         <div className="board-column">
         <section className="board-panel" aria-label="Project sequencing board">
           <div className="panel-heading">
@@ -810,6 +814,14 @@ export default function App() {
           onSelectSprintKey={(key) => setSelectedSprintKey((prev) => (prev === key ? null : key))}
         />
         </div>
+
+        <button
+          type="button"
+          className={`panel-gripper${sidePanelCollapsed ? " collapsed" : ""}`}
+          onClick={() => setSidePanelCollapsed((v) => !v)}
+          aria-label={sidePanelCollapsed ? "Expand side panel" : "Collapse side panel"}
+          title={sidePanelCollapsed ? "Expand side panel" : "Collapse side panel"}
+        />
 
         <aside className="side-panel">
           <FeasibilitySummaryView feasibility={feasibility} />
